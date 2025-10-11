@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeedTracker V51 Pilot</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>🌿 WeedTracker V51 Pilot</h1>
+    <nav>
+      <button onclick="navigate('jobs')">📋 Jobs</button>
+      <button onclick="navigate('records')">📁 Records</button>
+      <button onclick="navigate('batches')">🧪 Batches</button>
+      <button onclick="navigate('chemicals')">💧 Chemicals</button>
+      <button onclick="navigate('weeds')">🌱 Weeds</button>
+      <button onclick="navigate('map')">🗺️ Map</button>
+      <button onclick="navigate('reminders')">⏰ Reminders</button>
+    </nav>
+  </header>
+
+  <main id="app">
+    <section id="home" class="active">
+      <h2>Welcome to WeedTracker</h2>
+      <p>Select a section above to get started.</p>
+    </section>
+
+    <section id="jobs">
+      <h2>Create Task</h2>
+      <div id="jobForm"></div>
+    </section>
+
+    <section id="records">
+      <h2>Records</h2>
+      <div id="recordsList"></div>
+    </section>
+
+    <section id="batches">
+      <h2>Chemical Batches</h2>
+      <div id="batchList"></div>
+    </section>
+
+    <section id="chemicals">
+      <h2>Chemicals Library</h2>
+      <div id="chemicalList"></div>
+    </section>
+
+    <section id="weeds">
+      <h2>Weeds Library</h2>
+      <div id="weedList"></div>
+    </section>
+
+    <section id="map">
+      <h2>Mapping</h2>
+      <div id="mapContainer"></div>
+    </section>
+
+    <section id="reminders">
+      <h2>Reminders</h2>
+      <div id="reminderList"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2025 WeedTracker Pilot Build</p>
+  </footer>
+
+  <script src="apps.js"></script>
+  <script src="storage.js"></script>
+  <script src="extras.js"></script>
+</body>
+</html>
