@@ -1,73 +1,283 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WeedTracker V51 Pilot</title>
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>WeedTracker V52.1 Pilot</title>
+<link rel="stylesheet" href="styles.css"/>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </head>
 <body>
-  <header>
-    <h1>🌿 WeedTracker V51 Pilot</h1>
-    <nav>
-      <button onclick="navigate('jobs')">📋 Jobs</button>
-      <button onclick="navigate('records')">📁 Records</button>
-      <button onclick="navigate('batches')">🧪 Batches</button>
-      <button onclick="navigate('chemicals')">💧 Chemicals</button>
-      <button onclick="navigate('weeds')">🌱 Weeds</button>
-      <button onclick="navigate('map')">🗺️ Map</button>
-      <button onclick="navigate('reminders')">⏰ Reminders</button>
-    </nav>
-  </header>
 
-  <main id="app">
-    <section id="home" class="active">
-      <h2>Welcome to WeedTracker</h2>
-      <p>Select a section above to get started.</p>
-    </section>
+<!-- Busy overlay -->
+<div id="busy" hidden><div class="spinner"></div><div>Working…</div></div>
 
-    <section id="jobs">
-      <h2>Create Task</h2>
-      <div id="jobForm"></div>
-    </section>
+<!-- Splash -->
+<div id="splash"><div class="splash-inner">
+  <div class="logo">🌿</div>
+  <div class="title">WeedTracker V52.1 Pilot</div>
+  <div class="subtitle">Loading…</div>
+</div></div>
 
-    <section id="records">
-      <h2>Records</h2>
-      <div id="recordsList"></div>
-    </section>
+<header>
+  <h1>🌿 WeedTracker V52.1 Pilot</h1>
+  <div id="reminderBadge" class="badge" title="Pending reminders">0</div>
+</header>
 
-    <section id="batches">
-      <h2>Chemical Batches</h2>
-      <div id="batchList"></div>
-    </section>
+<!-- HOME TILES (NO TOP NAV BAR) -->
+<nav class="home-grid" id="homeTiles">
+  <button class="tile green"  onclick="ui.nav('create')">🧾 Create Task</button>
+  <button class="tile gold"   onclick="ui.nav('records')">📂 Records</button>
+  <button class="tile blue"   onclick="ui.nav('batches')">🧪 Batches</button>
+  <button class="tile teal"   onclick="ui.nav('inventory')">💧 Chemical Inventory</button>
+  <button class="tile amber"  onclick="ui.nav('procurement')">🛒 Procurement</button>
+  <button class="tile olive"  onclick="ui.nav('weeds')">🌱 Weeds</button>
+  <button class="tile orange" onclick="ui.nav('map')">🗺️ Mapping</button>
+  <button class="tile gray"   onclick="ui.nav('reminders')">⏰ Reminders</button>
+  <button class="tile gray"   onclick="ui.nav('settings')">⚙️ Settings</button>
+</nav>
 
-    <section id="chemicals">
-      <h2>Chemicals Library</h2>
-      <div id="chemicalList"></div>
-    </section>
+<main>
 
-    <section id="weeds">
-      <h2>Weeds Library</h2>
-      <div id="weedList"></div>
-    </section>
+  <!-- CREATE TASK -->
+  <section id="create" class="panel" hidden>
+    <h2>🧾 Create Task</h2>
 
-    <section id="map">
-      <h2>Mapping</h2>
-      <div id="mapContainer"></div>
-    </section>
+    <!-- 1) Type -->
+    <div class="group">
+      <div class="step">1</div><h3>Type</h3>
+      <select id="jobType" onchange="jobs.autoName()">
+        <option value="Inspection">Inspection</option>
+        <option value="Spot Spray">Spot Spray</option>
+        <option value="Roadside Spray">Roadside Spray</option>
+      </select>
+    </div>
 
-    <section id="reminders">
-      <h2>Reminders</h2>
-      <div id="reminderList"></div>
-    </section>
-  </main>
+    <!-- 2) Location -->
+    <div class="group">
+      <div class="step">2</div><h3>Location</h3>
+      <input id="location" placeholder="Road name / area" oninput="jobs.autoName()"/>
+      <button class="btn small" onclick="geo.capture()">📍 Use my location</button>
+    </div>
 
-  <footer>
-    <p>© 2025 WeedTracker Pilot Build</p>
-  </footer>
+    <!-- 3) Timing & Weather -->
+    <div class="group grid2">
+      <div>
+        <div class="step">3</div><h3>Timing</h3>
+        <label>Start</label>
+        <input id="startTime" type="datetime-local" onchange="jobs.autoName()">
+        <label>Stop (for Spot/Road)</label>
+        <input id="stopTime" type="datetime-local">
+      </div>
+      <div>
+        <h3>Weather</h3>
+        <div id="weatherBox" class="weather">—</div>
+        <button class="btn small" onclick="weather.fetchNow()">🌤 Update</button>
+      </div>
+    </div>
 
-  <script src="apps.js"></script>
-  <script src="storage.js"></script>
-  <script src="extras.js"></script>
+    <!-- 4) Job Name & Council -->
+    <div class="group grid2">
+      <div>
+        <div class="step">4</div><h3>Job Name</h3>
+        <div class="row-inline">
+          <input id="jobName" placeholder="Auto-generated…" readonly>
+          <button class="btn small gray" onclick="jobs.autoName()">↻ Auto-Name</button>
+        </div>
+      </div>
+      <div>
+        <h3>Council Job #</h3>
+        <input id="councilNo" placeholder="Optional reference">
+      </div>
+    </div>
+
+    <!-- 5) Weed & 6) Batch -->
+    <div class="group grid2">
+      <div>
+        <div class="step">5</div><h3>Weed</h3>
+        <select id="weedSelect"></select>
+      </div>
+      <div>
+        <div class="step">6</div><h3>Batch</h3>
+        <select id="batchSelect"></select>
+      </div>
+    </div>
+
+    <!-- 7) Notes & Photo -->
+    <div class="group grid2">
+      <div>
+        <div class="step">7</div><h3>Notes</h3>
+        <textarea id="notes" rows="3" placeholder="Optional"></textarea>
+      </div>
+      <div>
+        <h3>Attach Photo</h3>
+        <input id="photo" type="file" accept="image/*" capture="environment" onchange="jobs.handlePhoto(this)">
+        <img id="photoPreview" class="thumb" alt="" hidden>
+      </div>
+    </div>
+
+    <!-- Follow-up spinner -->
+    <div class="group">
+      <h3>Follow-up Reminder</h3>
+      <div class="row-inline">
+        <label for="followWeeks">Send reminder in:</label>
+        <select id="followWeeks">
+          <option value="0">No reminder</option>
+          <!-- 1..52 weeks -->
+        </select>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="group actions">
+      <button class="btn green"  onclick="jobs.save('complete')">✅ Save</button>
+      <button class="btn gold"   onclick="jobs.save('draft')">📝 Save as Draft</button>
+      <button class="btn gray"   onclick="ui.nav('homeTiles')">🏠 Home</button>
+    </div>
+  </section>
+
+  <!-- RECORDS -->
+  <section id="records" class="panel" hidden>
+    <h2>📂 Records</h2>
+    <div class="filters">
+      <select id="fType">
+        <option value="">All types</option>
+        <option>Inspection</option>
+        <option>Spot Spray</option>
+        <option>Roadside Spray</option>
+      </select>
+      <select id="fStatus">
+        <option value="">All statuses</option>
+        <option value="complete">Complete</option>
+        <option value="draft">Draft</option>
+      </select>
+      <select id="fWeed">
+        <option value="">All weeds</option>
+      </select>
+      <input id="fFrom" type="date">
+      <input id="fTo" type="date">
+      <input id="fQuery" placeholder="Search name/location">
+      <button class="btn small" onclick="records.search()">🔎 Search</button>
+    </div>
+    <div id="recordsList" class="list"></div>
+  </section>
+
+  <!-- BATCHES -->
+  <section id="batches" class="panel" hidden>
+    <h2>🧪 Batches</h2>
+
+    <div class="group grid2">
+      <div>
+        <label>Total Mix (L)</label>
+        <input id="mixTotal" type="number" min="0" step="100" value="1000">
+        <label>Batch No.</label>
+        <input id="batchNo" placeholder="e.g. 101">
+        <div class="row-inline">
+          <button class="btn blue" onclick="batches.add()">➕ Add Batch</button>
+          <button class="btn gray" onclick="batches.resetRows()">♻️ Reset rows</button>
+        </div>
+      </div>
+      <div>
+        <h3>Chemicals in batch (up to 10)</h3>
+        <div id="chemRows"></div>
+        <div class="row-inline">
+          <button class="btn small teal" onclick="batches.addRow()">➕ Add chemical</button>
+          <span id="chemRowCount"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <input id="batchSearch" placeholder="Search batches (e.g., 101)">
+      <button class="btn small" onclick="batches.render()">🔎 Search</button>
+    </div>
+
+    <div id="batchList" class="list"></div>
+  </section>
+
+  <!-- INVENTORY -->
+  <section id="inventory" class="panel" hidden>
+    <h2>💧 Chemical Inventory</h2>
+    <div class="group grid3">
+      <input id="invName" placeholder="Chemical name">
+      <input id="invActive" placeholder="Active ingredient">
+      <input id="invQty" type="number" min="0" step="0.1" placeholder="Qty (L / kg)">
+      <button class="btn teal" onclick="inventory.add()">➕ Add / Update</button>
+    </div>
+    <div class="group">
+      <input id="lowStock" type="number" min="0" step="1" placeholder="Low-stock threshold (drums)">
+      <button class="btn orange" onclick="inventory.applyThreshold()">⚠️ Set Low Stock Threshold</button>
+    </div>
+    <div id="inventoryList" class="list"></div>
+  </section>
+
+  <!-- PROCUREMENT (separate page) -->
+  <section id="procurement" class="panel" hidden>
+    <h2>🛒 Procurement</h2>
+    <div id="procList" class="list"></div>
+  </section>
+
+  <!-- WEEDS -->
+  <section id="weeds" class="panel" hidden>
+    <h2>🌱 Weeds</h2>
+    <div id="weedList" class="list"></div>
+  </section>
+
+  <!-- MAP -->
+  <section id="map" class="panel" hidden>
+    <h2>🗺️ Mapping</h2>
+    <div class="filters">
+      <select id="mType">
+        <option value="">All types</option>
+        <option>Inspection</option>
+        <option>Spot Spray</option>
+        <option>Roadside Spray</option>
+      </select>
+      <select id="mStatus">
+        <option value="">All</option>
+        <option value="complete">Complete</option>
+        <option value="draft">Draft</option>
+      </select>
+      <input id="mQuery" placeholder="Search by name/location">
+      <button class="btn small" onclick="mapView.refresh()">🔎 Search</button>
+    </div>
+    <div id="mapCanvas"></div>
+  </section>
+
+  <!-- REMINDERS -->
+  <section id="reminders" class="panel" hidden>
+    <h2>⏰ Reminders</h2>
+    <div class="group grid3">
+      <input id="remText" placeholder="Follow-up for…">
+      <input id="remDate" type="datetime-local">
+      <button class="btn amber" onclick="reminders.add()">➕ Add</button>
+    </div>
+    <div id="remList" class="list"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="settings" class="panel" hidden>
+    <h2>⚙️ Settings</h2>
+    <div class="group">
+      <button class="btn gray" onclick="dataTools.clearData()">🧹 Clear ALL job/batch/record data (keeps inventory & weeds)</button>
+      <button class="btn gray" onclick="dataTools.seedDemo()">📦 Load demo data</button>
+      <button class="btn gray" onclick="ui.nav('homeTiles')">🏠 Back to Home</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- Simple modal for inventory details -->
+<div id="modal" class="modal" hidden>
+  <div class="modal-card" id="modalBody"></div>
+</div>
+
+<!-- Scripts -->
+<script src="storage.js"></script>
+<script src="apps.js"></script>
+<script src="extras.js"></script>
 </body>
 </html>
