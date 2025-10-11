@@ -1,0 +1,99 @@
+/* WeedTracker V51 Pilot Styling */
+
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #101010;
+  color: #d7ffd9;
+  text-align: center;
+}
+
+header {
+  background: #1b1b1b;
+  padding: 20px 0;
+  border-bottom: 2px solid #2ed573;
+}
+
+h1 {
+  color: #2ed573;
+  margin-bottom: 15px;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+nav button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.3s;
+  color: white;
+}
+
+nav button:nth-child(1) { background: #00b894; }   /* Jobs */
+nav button:nth-child(2) { background: #6c5ce7; }   /* Records */
+nav button:nth-child(3) { background: #fdcb6e; }   /* Batches */
+nav button:nth-child(4) { background: #0984e3; }   /* Chemicals */
+nav button:nth-child(5) { background: #00cec9; }   /* Weeds */
+nav button:nth-child(6) { background: #e17055; }   /* Map */
+nav button:nth-child(7) { background: #e84393; }   /* Reminders */
+
+nav button:hover {
+  transform: scale(1.07);
+  opacity: 0.85;
+}
+
+main {
+  padding: 20px;
+}
+
+section {
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+
+section.active {
+  display: block;
+}
+
+footer {
+  margin-top: 30px;
+  background: #1b1b1b;
+  padding: 10px;
+  color: #aaa;
+}
+
+input, select, textarea {
+  background: #222;
+  color: white;
+  border: 1px solid #333;
+  padding: 8px;
+  border-radius: 5px;
+  margin: 5px;
+}
+
+button.save-btn {
+  background: #2ed573;
+  border: none;
+  padding: 10px 20px;
+  margin-top: 10px;
+  border-radius: 5px;
+  color: black;
+  cursor: pointer;
+}
+
+button.save-btn:hover {
+  background: #55efc4;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
