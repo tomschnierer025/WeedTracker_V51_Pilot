@@ -1,99 +1,66 @@
-/* WeedTracker V51 Pilot Styling */
-
-body {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
-  margin: 0;
-  padding: 0;
-  background: #101010;
-  color: #d7ffd9;
-  text-align: center;
+:root{
+  --bg:#101010;--card:#161616;--mut:#cfe8d2;--ink:#eaffea;
+  --green:#00b894;--gold:#fdcb6e;--blue:#0984e3;--teal:#00cec9;
+  --olive:#7c9a5b;--orange:#e17055;--amber:#ffb142;--gray:#2d3436;
+  --accent:#2ed573;--border:#263238;
 }
 
-header {
-  background: #1b1b1b;
-  padding: 20px 0;
-  border-bottom: 2px solid #2ed573;
-}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
 
-h1 {
-  color: #2ed573;
-  margin-bottom: 15px;
-}
+header{display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:14px;border-bottom:1px solid var(--border);background:#111;position:sticky;top:0;z-index:10}
+h1{margin:0;color:var(--accent)}
+.badge{margin-left:10px;background:var(--amber);color:#000;font-weight:700;padding:3px 8px;border-radius:999px}
 
-nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-}
+#splash{position:fixed;inset:0;background:radial-gradient(60% 60% at 50% 40%,#0f3d1e,#06140a 60%);
+  display:grid;place-items:center;z-index:999;transition:opacity .6s ease}
+#splash.hide{opacity:0;pointer-events:none}
+.splash-inner{color:#dfffe0;text-align:center}
+.splash-inner .logo{font-size:64px}
+.splash-inner .title{font-size:22px;margin-top:10px;letter-spacing:.5px}
+.splash-inner .subtitle{opacity:.8;margin-top:6px}
 
-nav button {
-  padding: 10px 18px;
-  border: none;
-  border-radius: 6px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: transform 0.2s, background 0.3s;
-  color: white;
-}
+.home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;padding:14px}
+.tile{border:none;color:#fff;font-weight:700;border-radius:12px;cursor:pointer;padding:14px 16px;
+  box-shadow:0 4px 10px rgba(0,0,0,.25);transition:transform .12s ease,opacity .12s ease}
+.tile:hover{transform:translateY(-2px);opacity:.95}
+.tile.green{background:var(--green)} .tile.gold{background:var(--gold);color:#000}
+.tile.blue{background:var(--blue)} .tile.teal{background:var(--teal);color:#001c1b}
+.tile.olive{background:var(--olive)} .tile.orange{background:var(--orange)} .tile.amber{background:var(--amber);color:#1a1200}
+.tile.gray{background:var(--gray)}
 
-nav button:nth-child(1) { background: #00b894; }   /* Jobs */
-nav button:nth-child(2) { background: #6c5ce7; }   /* Records */
-nav button:nth-child(3) { background: #fdcb6e; }   /* Batches */
-nav button:nth-child(4) { background: #0984e3; }   /* Chemicals */
-nav button:nth-child(5) { background: #00cec9; }   /* Weeds */
-nav button:nth-child(6) { background: #e17055; }   /* Map */
-nav button:nth-child(7) { background: #e84393; }   /* Reminders */
+main{padding:10px 14px 30px}
+.panel{margin:14px auto;max-width:1100px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+.group{margin:14px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.row-inline{display:flex;gap:8px;align-items:center}
 
-nav button:hover {
-  transform: scale(1.07);
-  opacity: 0.85;
-}
+input,select,textarea{width:100%;background:#121212;color:var(--ink);border:1px solid #2a2a2a;border-radius:10px;padding:10px}
+label{display:block;margin:6px 0 4px;color:var(--mut)}
+h2{margin:8px 0 14px;color:#d4ffd6} h3{margin:6px 0;color:#bff0c2}
 
-main {
-  padding: 20px;
-}
+.weather{background:#0f1712;border:1px solid #234;border-radius:10px;padding:10px}
+.list{display:flex;flex-direction:column;gap:10px}
+.card{background:#121212;border:1px solid #2a2a2a;border-radius:12px;padding:12px}
+.card .row{display:flex;gap:8px;flex-wrap:wrap}
+.tag{padding:2px 8px;border-radius:999px;background:#20351f;border:1px solid #345;color:#cde}
 
-section {
-  display: none;
-  animation: fadeIn 0.3s ease;
-}
+#mapCanvas{height:480px;border-radius:12px;overflow:hidden;border:1px solid #233}
+.chemRow{display:grid;grid-template-columns:1fr 160px;gap:8px;margin-bottom:6px}
+.thumb{max-width:120px;border-radius:10px;border:1px solid #234;margin-top:6px}
 
-section.active {
-  display: block;
-}
+.step{display:inline-grid;place-items:center;width:28px;height:28px;background:#0e2b13;border:1px solid #2e5b3c;
+  border-radius:999px;color:#b9f7c1;font-weight:700;margin-right:8px}
 
-footer {
-  margin-top: 30px;
-  background: #1b1b1b;
-  padding: 10px;
-  color: #aaa;
-}
+.spinner{width:28px;height:28px;border-radius:50%;border:4px solid #234;border-top-color:#8efaa0;animation:spin .9s linear infinite;margin:0 auto 8px}
+#busy{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;text-align:center;font-weight:700}
+#busy[hidden]{display:none}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:grid;place-items:center;z-index:1000}
+.modal[hidden]{display:none}
+.modal-card{max-width:520px;width:92%;background:#121212;border:1px solid #2a2a2a;border-radius:12px;padding:14px}
 
-input, select, textarea {
-  background: #222;
-  color: white;
-  border: 1px solid #333;
-  padding: 8px;
-  border-radius: 5px;
-  margin: 5px;
-}
-
-button.save-btn {
-  background: #2ed573;
-  border: none;
-  padding: 10px 20px;
-  margin-top: 10px;
-  border-radius: 5px;
-  color: black;
-  cursor: pointer;
-}
-
-button.save-btn:hover {
-  background: #55efc4;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+@keyframes spin{to{transform:rotate(360deg)}}
