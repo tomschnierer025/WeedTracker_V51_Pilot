@@ -1,92 +1,92 @@
-:root{
-  --bg:#0f1113; --card:#15181b; --ink:#eaf7ee; --mut:#cde7d2;
-  --border:#21262c;
-  --green:#00b894; --orange:#ff8f4c; --amber:#f6c85f; --blue:#2196f3;
-  --teal:#00c2c7; --gold:#ffcc5c; --purple:#6c5ce7; --gray:#2d3436;
-  --accent:#2ed573;
+/* Weed Tracker V50 Pilot — Full Styles */
+
+/* Base */
+* { box-sizing: border-box; }
+html,body { height:100%; }
+body {
+  margin:0; background:#141416; color:#f3f5f7;
+  font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
+h1,h2,h3 { margin:0 0 10px }
+.app-title { margin:16px 0 6px; font-size:1.25rem; opacity:.95 }
 
-*{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);
-  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
-
-h2{margin:8px 0 14px}
-h3{margin:6px 0;color:#cfe8d2}
-label{display:block;margin:6px 0 4px;color:var(--mut)}
-.muted{color:#93a29c;font-size:.9em}
-
-input,select,textarea{
-  width:100%;background:#121417;color:var(--ink);
-  border:1px solid #262a2f;border-radius:10px;padding:10px
+/* Splash */
+#splash-screen {
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  background:#0d0e10; color:#77ff7a; z-index:9999; animation:fadeOut 2.6s ease forwards;
 }
+#splash-screen h1{ font-size:1.6rem; letter-spacing:.3px }
+@keyframes fadeOut { 0%,85%{opacity:1} 100%{opacity:0; visibility:hidden} }
 
-.panel{max-width:1100px;margin:14px auto;background:var(--card);
-  border:1px solid var(--border);border-radius:14px;padding:16px}
+/* Pages */
+.page { display:none; padding:16px 12px 30px; max-width:940px; margin:0 auto }
+.page.active { display:block }
 
-.home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;padding:6px}
-.tile{border:none;color:#fff;font-weight:800;border-radius:12px;cursor:pointer;padding:16px 18px;
-  box-shadow:0 5px 14px rgba(0,0,0,.28);transition:transform .12s ease,opacity .12s ease}
-.tile:hover{transform:translateY(-2px);opacity:.95}
-.tile.green{background:var(--green)}
-.tile.orange{background:var(--orange)}
-.tile.amber{background:var(--amber);color:#1b1400}
-.tile.blue{background:var(--blue)}
-.tile.teal{background:var(--teal);color:#001b1a}
-.tile.gold{background:var(--gold);color:#231c00}
-.tile.purple{background:#f4a261;color:#1c1100} /* amber-ish for reminders, not purple */
-.tile.gray{background:var(--gray)}
-
-.group{margin:14px 0}
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
-.row-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.actions{display:flex;gap:10px;flex-wrap:wrap}
-
-.button-row{display:flex;gap:8px;flex-wrap:wrap}
-.btn{border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:700;color:#fff}
-.btn.small{padding:6px 10px;font-weight:700}
-.btn.green{background:var(--green)}
-.btn.gold{background:var(--amber);color:#2b2000}
-.btn.blue{background:var(--blue)}
-.btn.teal{background:var(--teal);color:#001b1a}
-.btn.gray{background:#3a3f43}
-.btn.orange{background:var(--orange)}
-.btn.amber{background:var(--amber);color:#2b2000}
-
-.step{
-  display:inline-grid;place-items:center;width:28px;height:28px;margin-right:8px;
-  background:#0e2b13;border:1px solid #2e5b3c;border-radius:999px;color:#b9f7c1;font-weight:800
+/* Tiles (Home) */
+.menu { display:flex; flex-direction:column; gap:12px; margin-top:10px }
+.tile {
+  width:100%; padding:16px 14px; border-radius:12px; border:0; color:#fff; font-size:1.05rem;
+  display:flex; align-items:center; justify-content:center; gap:10px; cursor:pointer; transition:.2s transform;
 }
+.tile:hover { transform: translateY(-1px) }
+.tile-blue   { background: linear-gradient(135deg,#2b7bff,#0060ff) }
+.tile-green  { background: linear-gradient(135deg,#1fbf75,#14945a) }
+.tile-teal   { background: linear-gradient(135deg,#21b9b9,#0f8e8e) }
+.tile-purple { background: linear-gradient(135deg,#8f5eff,#6a34f5) }
+.tile-orange { background: linear-gradient(135deg,#ff9533,#ff7a00) }
+.tile-yellow { background: linear-gradient(135deg,#f7c948,#f5b700); color:#17212b }
+.tile-cyan   { background: linear-gradient(135deg,#2dc6ff,#0da6e6) }
+.tile-grey   { background: linear-gradient(135deg,#5f6673,#4a515d) }
 
-.weather{background:#0f1712;border:1px solid #234;border-radius:10px;padding:10px}
+/* Sections */
+.section { background:#1b1c20; border:1px solid #2a2d33; border-radius:12px; padding:14px; margin:12px 0 }
+.section-title { font-weight:600; margin-bottom:10px; color:#b9c1cb }
+.row-compact { display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+.muted { color:#9aa3ae } .small{ font-size:.9rem }
 
-.list{display:flex;flex-direction:column;gap:10px}
-.card{background:#121417;border:1px solid #262a2f;border-radius:12px;padding:12px}
-.card .row{display:flex;gap:8px;flex-wrap:wrap}
-.tag{padding:2px 8px;border-radius:999px;background:#20351f;border:1px solid #345;color:#cde}
+/* Inputs */
+input, select, textarea {
+  width:100%; max-width:520px; padding:10px 12px; border-radius:10px;
+  background:#111319; color:#e8ecf1; border:1px solid #30343b; outline:none; margin:6px 0;
+}
+input[type="file"]{ border:none; background:transparent; padding:0 }
 
-.thumb{max-width:120px;border-radius:10px;border:1px solid #234;margin-top:6px}
+/* Actions */
+button.action {
+  background:#0b80ff; border:0; color:#fff; padding:10px 16px; border-radius:10px; cursor:pointer;
+}
+button.action:hover{ background:#0a74e5 }
+button.action.success{ background:#21b372 }
+button.action.danger { background:#d94848 }
+button.action.ghost  { background:#2a2f36 }
 
-#mapCanvas{height:520px;border-radius:12px;overflow:hidden;border:1px solid #233}
+/* Lists / Cards */
+.list{ display:grid; gap:10px; margin-top:10px }
+.record-card, .chem-card, .batch-card, .rem-card {
+  background:#1b1d23; border:1px solid #2c3139; border-radius:12px; padding:12px;
+}
+.record-card h3{ margin:0 0 6px }
+.tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.8rem; margin-right:6px }
+.tag.complete{ background:#103d28; color:#7af7a8 }
+.tag.incomplete{ background:#3b330f; color:#f7e27a }
+.tag.draft{ background:#3b1414; color:#ff9b9b }
 
-.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.filters.sticky{position:sticky;top:8px;z-index:5;background:linear-gradient(0deg,rgba(21,24,27,0),rgba(21,24,27,.95) 25%,rgba(21,24,27,.95) 100%);padding:8px;border-radius:12px}
+/* Filters */
+.filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px }
+.filters input, .filters select { max-width:240px }
 
-.spinner{width:28px;height:28px;border-radius:50%;border:4px solid #234;border-top-color:#8efaa0;animation:spin .9s linear infinite;margin:0 auto 8px}
-#busy{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;text-align:center;font-weight:700;z-index:999}
-#busy[hidden]{display:none}
+/* Map */
+#mapView { width:100%; height:72vh; border-radius:12px; border:1px solid #2a2f36; margin-top:10px }
 
-#splash{position:fixed;inset:0;background:radial-gradient(60% 60% at 50% 40%,#0f3d1e,#06140a 62%);display:grid;place-items:center;z-index:1000}
-#splash.hide{animation:fadeout .6s ease forwards}
-.splash-box{text-align:center;color:#dfffe0}
-.splash-logo{font-size:64px}
-.splash-title{margin-top:10px;font-size:22px;letter-spacing:.6px}
-.splash-sub{opacity:.8;margin-top:6px}
-
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:2000}
-.modal[hidden]{display:none}
-.modal-card{max-width:560px;width:92%;background:#121417;border:1px solid #262a2f;border-radius:12px;padding:14px}
-
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes fadeout{to{opacity:0;visibility:hidden}}
+/* Popup (modal) */
+.popup {
+  position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:min(92vw,720px); background:#1b1c20; border:1px solid #2a2f36; border-radius:14px; padding:14px;
+  display:none; z-index:10000;
+}
+.popup.active{ display:block; animation:fadeIn .2s ease }
+.popup h3{ margin:6px 0 10px }
+.popup .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:10px }
+.popup .row-right{ display:flex; justify-content:flex-end; gap:8px }
+@keyframes fadeIn{ from{opacity:0; transform:translate(-50%,-48%)} to{opacity:1; transform:translate(-50%,-50%)} }
