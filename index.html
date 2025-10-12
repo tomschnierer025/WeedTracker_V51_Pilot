@@ -1,294 +1,203 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>WeedTracker Pilot V52</title>
-<link rel="stylesheet" href="styles.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Weed Tracker V50 Pilot</title>
+  <link rel="stylesheet" href="styles.css" />
 
-<!-- Leaflet -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <!-- Leaflet for mapping -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- App scripts -->
+  <script defer src="storage.js"></script>
+  <script defer src="extras.js"></script>
+  <script defer src="apps.js"></script>
 </head>
 <body>
 
-<!-- Splash -->
-<div id="splash">
-  <div class="splash-box">
-    <div class="splash-logo">🌿</div>
-    <div class="splash-title">WeedTracker Pilot V52</div>
-    <div class="splash-sub">Loading…</div>
-  </div>
-</div>
-
-<!-- Busy overlay -->
-<div id="busy" hidden>
-  <div class="spinner"></div>
-  <div>Working…</div>
-</div>
-
-<!-- HOME (no header bar) -->
-<main id="home" class="panel">
-  <div class="home-grid">
-    <button class="tile green"  onclick="ui.nav('create')">🧾 Create Task</button>
-    <button class="tile orange" onclick="ui.nav('records')">📚 Records</button>
-    <button class="tile amber"  onclick="ui.nav('batches')">🧪 Batches</button>
-    <button class="tile blue"   onclick="ui.nav('inventory')">⚗️ Chemical Inventory</button>
-    <button class="tile gold"   onclick="ui.nav('procurement')">🛒 Procurement</button>
-    <button class="tile teal"   onclick="ui.nav('map')">🗺️ Mapping</button>
-    <button class="tile purple" onclick="ui.nav('reminders')">⏰ Reminders</button>
-    <button class="tile gray"   onclick="ui.nav('settings')">⚙️ Settings</button>
-  </div>
-</main>
-
-<!-- CREATE TASK -->
-<section id="create" class="panel" hidden>
-  <h2>🧾 Create Task</h2>
-
-  <!-- 1 Type -->
-  <div class="group">
-    <div class="step">1</div><h3>Type</h3>
-    <select id="jobType" onchange="jobs.autoName(); ui.toggleTimeRow()">
-      <option value="Inspection">Inspection</option>
-      <option value="Spot Spray">Spot Spray</option>
-      <option value="Road Spray">Road Spray</option>
-    </select>
+  <!-- Splash -->
+  <div id="splash-screen" aria-hidden="true">
+    <h1>🌿 Weed Tracker V50 Pilot</h1>
   </div>
 
-  <!-- 2 Location -->
-  <div class="group">
-    <div class="step">2</div><h3>Location</h3>
-    <input id="location" placeholder="Road name / area" oninput="jobs.autoName()"/>
-    <div class="row-inline">
-      <button class="btn small" onclick="geo.capture()">📍 Use my location</button>
-      <span id="gpsText" class="muted">—</span>
+  <!-- HOME -->
+  <div id="home" class="page active">
+    <h2 class="app-title">Weed Tracker V50 Pilot</h2>
+    <div class="menu">
+      <button id="btnCreateTask" class="tile tile-blue">🧾 Create Task</button>
+      <button id="btnRecords" class="tile tile-green">📚 Records</button>
+      <button id="btnInventory" class="tile tile-teal">🧪 Chemical Inventory</button>
+      <button id="btnBatches" class="tile tile-purple">⚗️ Batches</button>
+      <button id="btnProcurement" class="tile tile-orange">🛒 Procurement List</button>
+      <button id="btnMapping" class="tile tile-yellow">🗺️ Mapping</button>
+      <button id="btnReminders" class="tile tile-cyan">⏰ Reminders</button>
+      <button id="btnSettings" class="tile tile-grey">⚙️ Settings</button>
     </div>
   </div>
 
-  <!-- 3 Timing / Weather -->
-  <div class="group grid2">
-    <div>
-      <div class="step">3</div><h3>Time</h3>
-      <label>Start</label>
-      <input id="startTime" type="datetime-local" onchange="jobs.autoName()"/>
-      <label>Stop</label>
-      <input id="stopTime" type="datetime-local"/>
+  <!-- CREATE TASK -->
+  <div id="createTask" class="page">
+    <div class="section">
+      <div class="section-title">1) Task Type</div>
+      <select id="jobType">
+        <option>Inspection</option>
+        <option>SpotSpray</option>
+        <option>Roadside</option>
+      </select>
     </div>
-    <div>
-      <h3>Weather</h3>
-      <div id="weatherBox" class="weather">—</div>
-      <button class="btn small" onclick="weather.fetchNow()">🌤 Update weather</button>
-    </div>
-  </div>
 
-  <!-- 4 Name / Council -->
-  <div class="group grid2">
-    <div>
-      <div class="step">4</div><h3>Job Name</h3>
-      <div class="row-inline">
-        <input id="jobName" placeholder="Auto-generated…" readonly/>
-        <button class="btn small gray" onclick="jobs.autoName()">↻ Auto-name</button>
+    <div class="section">
+      <div class="section-title">2) Location</div>
+      <input id="locationInput" placeholder="Road / Reserve / Site name" />
+      <div class="row-compact">
+        <button class="action" id="btnLocate">Locate Me</button>
+        <span id="gpsPreview" class="muted">GPS: —</span>
       </div>
     </div>
-    <div>
-      <h3>Council Job #</h3>
-      <input id="councilNo" placeholder="Optional"/>
-    </div>
-  </div>
 
-  <!-- 5 Weed / 6 Batch -->
-  <div class="group grid2">
-    <div>
-      <div class="step">5</div><h3>Weed</h3>
+    <div class="section">
+      <div class="section-title">3) Tracking</div>
+      <div class="row-compact">
+        <label>Start:</label><input id="startTime" type="datetime-local"/>
+        <label>Stop:</label><input id="stopTime" type="datetime-local"/>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">4) Job Name & Weather</div>
+      <div class="row-compact">
+        <button class="action" id="btnAutoName">Auto-Generate Name</button>
+        <span id="jobNamePreview" class="muted">Name: —</span>
+      </div>
+      <div class="row-compact">
+        <button class="action" id="btnWeather">Pull Weather</button>
+        <span id="weatherPreview" class="muted">—</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">5) Weed & Batch</div>
+      <input id="weedSearch" placeholder="Search weeds…"/>
       <select id="weedSelect"></select>
-    </div>
-    <div>
-      <div class="step">6</div><h3>Batch</h3>
-      <select id="batchSelect"></select>
-      <div class="row-inline">
-        <button class="btn small" onclick="ui.quickNewBatch()">➕ Quick new batch</button>
+
+      <div class="row-compact">
+        <label>Batch:</label>
+        <select id="batchSelect"></select>
+        <button class="action" id="btnNewBatch">New Batch</button>
       </div>
     </div>
-  </div>
 
-  <!-- 7 Notes / Photo -->
-  <div class="group grid2">
-    <div>
-      <div class="step">7</div><h3>Notes</h3>
-      <textarea id="notes" rows="3" placeholder="Optional…"></textarea>
+    <div class="section">
+      <div class="section-title">6) Photos & Notes</div>
+      <input id="photoFile" type="file" accept="image/*" />
+      <textarea id="jobNotes" rows="4" placeholder="Notes…"></textarea>
     </div>
-    <div>
-      <h3>Attach Photo</h3>
-      <input id="photo" type="file" accept="image/*" capture="environment" onchange="jobs.handlePhoto(this)"/>
-      <img id="photoPreview" class="thumb" hidden alt="preview"/>
-    </div>
-  </div>
 
-  <!-- 8 Linked job -->
-  <div class="group">
-    <div class="step">8</div><h3>Linked Job(s)</h3>
-    <input id="linkedJobs" placeholder="Paste job name(s) or ID(s), comma-separated"/>
-    <div class="muted">Use this to link inspections → spray jobs (both ways).</div>
-  </div>
-
-  <!-- 9 Reminder -->
-  <div class="group">
-    <div class="step">9</div><h3>Follow-up reminder</h3>
-    <div class="row-inline">
-      <label for="followWeeks">Send reminder in</label>
-      <select id="followWeeks"></select>
-      <span class="muted">weeks</span>
-    </div>
-  </div>
-
-  <!-- 10 Actions -->
-  <div class="group actions">
-    <button class="btn green" onclick="jobs.save('complete')">✅ Save</button>
-    <button class="btn gold"  onclick="jobs.save('draft')">📝 Save as draft</button>
-    <button class="btn gray"  onclick="ui.nav('home')">🏠 Home</button>
-  </div>
-</section>
-
-<!-- RECORDS -->
-<section id="records" class="panel" hidden>
-  <h2>📚 Records</h2>
-  <div class="filters">
-    <select id="rType">
-      <option value="">All types</option>
-      <option>Inspection</option>
-      <option>Spot Spray</option>
-      <option>Road Spray</option>
-    </select>
-    <select id="rStatus">
-      <option value="">All</option>
-      <option value="complete">Complete</option>
-      <option value="draft">Incomplete/Draft</option>
-    </select>
-    <select id="rWeed">
-      <option value="">All weeds</option>
-    </select>
-    <input id="rFrom" type="date"/>
-    <input id="rTo" type="date"/>
-    <input id="rQuery" placeholder="Search by name / road"/>
-    <button class="btn small" onclick="records.render()">🔎 Search</button>
-  </div>
-  <div id="recordsList" class="list"></div>
-</section>
-
-<!-- BATCHES -->
-<section id="batches" class="panel" hidden>
-  <h2>🧪 Batches</h2>
-  <div class="group grid2">
-    <div>
-      <label>Total Mix (L)</label>
-      <input id="mixTotal" type="number" min="0" step="50" value="1000"/>
-      <label>Batch ID</label>
-      <input id="batchNo" placeholder="e.g. 101"/>
-      <div class="row-inline">
-        <button class="btn blue" onclick="batches.add()">➕ Add batch</button>
-        <button class="btn gray" onclick="batches.resetRows()">♻️ Reset rows</button>
+    <div class="section">
+      <div class="section-title">7) Reminder</div>
+      <div class="row-compact">
+        <label>Follow-up (weeks):</label>
+        <select id="reminderWeeks">
+          <option value="0">No reminder</option>
+          <!-- 1..52 -->
+          <script>
+            for (let i=1;i<=52;i++){
+              document.write(`<option value="${i}">${i}</option>`);
+            }
+          </script>
+        </select>
       </div>
     </div>
-    <div>
-      <h3>Chemicals (up to 10)</h3>
-      <div id="chemRows"></div>
-      <div class="row-inline">
-        <button class="btn small teal" onclick="batches.addRow()">➕ Add chemical</button>
-        <span id="chemRowCount" class="muted"></span>
-      </div>
+
+    <div class="section">
+      <button class="action success" id="btnSaveJob">Save</button>
+      <button class="action" id="btnSaveDraft">Save as Draft</button>
+      <button class="action ghost" id="btnBackHome1">Home</button>
     </div>
   </div>
 
-  <div class="filters">
-    <input id="bQuery" placeholder="Search by Batch ID"/>
-    <input id="bFrom" type="date"/>
-    <input id="bTo" type="date"/>
-    <button class="btn small" onclick="batches.render()">🔎 Search</button>
+  <!-- RECORDS -->
+  <div id="records" class="page">
+    <div class="filters">
+      <input id="recordsSearch" placeholder="Search by name / road / weed…" />
+      <select id="recordsType">
+        <option>All</option><option>Inspection</option><option>SpotSpray</option><option>Roadside</option>
+      </select>
+      <select id="recordsStatus">
+        <option>All</option><option>Complete</option><option>Incomplete</option><option>Draft</option>
+      </select>
+      <input id="recordsDate" type="date" />
+      <button class="action" id="btnRecordsFilter">Search</button>
+    </div>
+    <div id="recordsList" class="list"></div>
+    <button class="action ghost" id="btnBackHome2">Home</button>
   </div>
 
-  <div id="batchList" class="list"></div>
-</section>
-
-<!-- INVENTORY -->
-<section id="inventory" class="panel" hidden>
-  <h2>⚗️ Chemical Inventory</h2>
-  <div class="group grid3">
-    <input id="invName" placeholder="Chemical name"/>
-    <input id="invActive" placeholder="Active ingredient"/>
-    <input id="invQty" type="number" min="0" step="0.1" placeholder="Qty (L / kg)"/>
-    <button class="btn teal" onclick="inventory.add()">➕ Add / Update</button>
+  <!-- INVENTORY -->
+  <div id="inventory" class="page">
+    <div class="filters">
+      <input id="chemSearch" placeholder="Search chemicals…"/>
+      <button class="action" id="btnAddChem">Add Chemical</button>
+    </div>
+    <div id="chemList" class="list"></div>
+    <button class="action ghost" id="btnBackHome3">Home</button>
   </div>
-  <div class="group">
-    <input id="lowStock" type="number" min="0" step="1" placeholder="Low-stock threshold (drums)"/>
-    <button class="btn orange" onclick="inventory.applyThreshold()">⚠️ Set low stock threshold</button>
+
+  <!-- BATCHES -->
+  <div id="batches" class="page">
+    <div class="filters">
+      <input id="batchSearch" placeholder="Search batch id…"/>
+      <input id="batchDateFilter" type="date" />
+      <button class="action" id="btnBatchFilter">Search</button>
+      <button class="action" id="btnCreateBatch">Create Batch</button>
+    </div>
+    <div id="batchList" class="list"></div>
+    <button class="action ghost" id="btnBackHome4">Home</button>
   </div>
-  <div id="inventoryList" class="list"></div>
-</section>
 
-<!-- PROCUREMENT -->
-<section id="procurement" class="panel" hidden>
-  <h2>🛒 Procurement</h2>
-  <div id="procList" class="list"></div>
-</section>
-
-<!-- MAP -->
-<section id="map" class="panel" hidden>
-  <h2>🗺️ Mapping</h2>
-  <div class="filters sticky">
-    <select id="mType">
-      <option value="">All types</option>
-      <option>Inspection</option>
-      <option>Spot Spray</option>
-      <option>Road Spray</option>
-    </select>
-    <select id="mWeed">
-      <option value="">All weeds</option>
-    </select>
-    <select id="mStatus">
-      <option value="">All</option>
-      <option value="complete">Complete</option>
-      <option value="draft">Incomplete</option>
-    </select>
-    <input id="mBatch" placeholder="Batch ID"/>
-    <input id="mFrom" type="date"/>
-    <input id="mTo" type="date"/>
-    <input id="mQuery" placeholder="Road / name keyword"/>
-    <button class="btn small" onclick="mapView.refresh()">🔎 Search</button>
-    <button class="btn small gray" onclick="mapView.locate()">📍 Locate me</button>
+  <!-- PROCUREMENT -->
+  <div id="procurement" class="page">
+    <div id="procureList" class="list"></div>
+    <button class="action ghost" id="btnBackHome5">Home</button>
   </div>
-  <div id="mapCanvas"></div>
-</section>
 
-<!-- REMINDERS -->
-<section id="reminders" class="panel" hidden>
-  <h2>⏰ Reminders</h2>
-  <div class="group grid3">
-    <input id="remText" placeholder="Follow-up for…"/>
-    <input id="remDate" type="datetime-local"/>
-    <button class="btn amber" onclick="reminders.add()">➕ Add</button>
+  <!-- MAPPING -->
+  <div id="map" class="page">
+    <div class="filters">
+      <select id="mapType">
+        <option>All</option><option>Inspection</option><option>SpotSpray</option><option>Roadside</option>
+      </select>
+      <select id="mapStatus">
+        <option>All</option><option>Open</option><option>Closed</option>
+      </select>
+      <input id="mapDate" type="date"/>
+      <button class="action" id="btnMapFilter">Filter</button>
+      <button class="action" id="btnLocateMe">Locate Me</button>
+    </div>
+    <div id="mapView"></div>
+    <button class="action ghost" id="btnBackHome6">Home</button>
   </div>
-  <div id="remList" class="list"></div>
-</section>
 
-<!-- SETTINGS -->
-<section id="settings" class="panel" hidden>
-  <h2>⚙️ Settings</h2>
-  <div class="group">
-    <button class="btn gray" onclick="dataTools.clearData()">🧹 Clear jobs & batches (keep chemicals & weeds)</button>
-    <button class="btn gray" onclick="dataTools.seedDemo(true)">📦 Load demo data</button>
-    <button class="btn gray" onclick="ui.nav('home')">🏠 Home</button>
+  <!-- REMINDERS -->
+  <div id="reminders" class="page">
+    <div id="reminderList" class="list"></div>
+    <button class="action ghost" id="btnBackHome7">Home</button>
   </div>
-</section>
 
-<!-- Modal -->
-<div id="modal" class="modal" hidden>
-  <div class="modal-card" id="modalBody"></div>
-</div>
+  <!-- SETTINGS -->
+  <div id="settings" class="page">
+    <div class="section">
+      <div class="section-title">Data</div>
+      <button class="action danger" id="btnClearData">Clear ALL Local Data</button>
+      <div class="muted small">Clears jobs, batches, records, pins & reminders. Leaves the chemical & weed libraries intact.</div>
+    </div>
+    <button class="action ghost" id="btnBackHome8">Home</button>
+  </div>
 
-<!-- Scripts -->
-<script src="storage.js"></script>
-<script src="apps.js"></script>
-<script src="extras.js"></script>
+  <!-- Reusable Modal -->
+  <div id="modal" class="popup" role="dialog" aria-modal="true"></div>
+
 </body>
 </html>
