@@ -1,592 +1,419 @@
-/* WeedTracker Pilot V52 – core app (UI, jobs, records, batches, map, inventory) */
+/* Weed Tracker V50 Pilot — core logic: navigation, tasks, batches, records, map, reminders */
 
-const ui = {
-  nav(targetId){
-    document.querySelectorAll('main, section.panel').forEach(el=> el.hidden = true);
-    const el = document.getElementById(targetId);
-    if(el) el.hidden = false;
-    localStorage.setItem('wt:last', targetId);
+const qs = (s)=>document.querySelector(s);
+const qsa = (s)=>[...document.querySelectorAll(s)];
 
-    // page hooks
-    if(targetId==='create') ui.refreshCreate();
-    if(targetId==='records') records.render();
-    if(targetId==='batches'){ batches.ensureRows(); batches.render(); }
-    if(targetId==='inventory') inventory.render();
-    if(targetId==='procurement') inventory.renderProc();
-    if(targetId==='map') mapView.initOnce();
-    if(targetId==='reminders') reminders.render();
-  },
+function showPage(id){
+  qsa(".page").forEach(p=>p.classList.remove("active"));
+  qs("#"+id).classList.add("active");
+  if(id==="records") renderRecords();
+  if(id==="inventory") renderChemInventory();
+  if(id==="batches") renderBatches();
+  if(id==="procurement") renderProcurement();
+  if(id==="map") { ensureMap(); renderMap(); }
+  if(id==="reminders") renderReminders();
+}
 
-  start(){
-    // splash
-    setTimeout(()=> document.getElementById('splash').classList.add('hide'), 1800);
+/* ---------------- Boot & Nav ---------------- */
+document.addEventListener("DOMContentLoaded", ()=>{
+  setTimeout(()=>qs("#splash-screen").style.display="none", 2400);
 
-    // seed
-    weeds.ensureSeeded();
-    inventory.ensureSeeded();
-    batches.ensureRows();
-    ui.populateWeeds();
-    ui.populateBatches();
-    ui.fillWeeksSpinner();
+  // Home buttons
+  qs("#btnCreateTask").onclick = ()=>showPage("createTask");
+  qs("#btnRecords").onclick    = ()=>showPage("records");
+  qs("#btnInventory").onclick  = ()=>showPage("inventory");
+  qs("#btnBatches").onclick    = ()=>showPage("batches");
+  qs("#btnProcurement").onclick= ()=>showPage("procurement");
+  qs("#btnMapping").onclick    = ()=>showPage("map");
+  qs("#btnReminders").onclick  = ()=>showPage("reminders");
+  qs("#btnSettings").onclick   = ()=>showPage("settings");
 
-    // last page or home
-    const last = localStorage.getItem('wt:last') || 'home';
-    ui.nav(last);
+  // Back home buttons
+  ["1","2","3","4","5","6","7","8"].forEach(n=>{
+    const el = qs("#btnBackHome"+n); if(el) el.onclick = ()=>showPage("home");
+  });
 
-    reminders.askPermission();
-    reminders.updateBadge && reminders.updateBadge();
-  },
+  // Create Task handlers
+  qs("#btnLocate").onclick     = handleLocate;
+  qs("#btnAutoName").onclick   = handleAutoName;
+  qs("#btnWeather").onclick    = handleWeather;
+  qs("#btnNewBatch").onclick   = openCreateBatch;
+  qs("#btnSaveJob").onclick    = ()=>handleSaveJob(false);
+  qs("#btnSaveDraft").onclick  = ()=>handleSaveJob(true);
 
-  refreshCreate(){
-    // default start time now
-    const start = document.getElementById('startTime');
-    if(!start.value){
-      const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
-      start.value = d.toISOString().slice(0,16);
-    }
-    jobs.autoName();
-  },
+  // Records filters
+  qs("#btnRecordsFilter").onclick = renderRecords;
 
-  populateWeeds(){
-    const list = weeds.getGrouped(); // noxious first
-    const weedSel = document.getElementById('weedSelect');
-    const rWeed = document.getElementById('rWeed');
-    const mWeed = document.getElementById('mWeed');
+  // Batches filters / create
+  qs("#btnBatchFilter").onclick = renderBatches;
+  qs("#btnCreateBatch").onclick = openCreateBatch;
 
-    const options = (arr)=> arr.map(w=>`<option value="${w.name}">${w.name}</option>`).join('');
+  // Map filters
+  qs("#btnMapFilter").onclick = renderMap;
+  qs("#btnLocateMe").onclick  = locateUser;
 
-    weedSel.innerHTML = options(list);
-    rWeed.innerHTML   = `<option value="">All weeds</option>` + options(list);
-    mWeed.innerHTML   = `<option value="">All weeds</option>` + options(list);
-  },
+  // Settings
+  qs("#btnClearData").onclick = ()=>clearAllData(true);
 
-  populateBatches(){
-    const sel = document.getElementById('batchSelect');
-    const all = store.get('wt:batches');
-    sel.innerHTML = `<option value="">— None —</option>` + all.map(b=>`<option value="${b.id}">#${b.id} (${b.remaining} / ${b.totalL} L)</option>`).join('');
-  },
-
-  fillWeeksSpinner(){
-    const sel = document.getElementById('followWeeks');
-    let html = '<option value="0">No reminder</option>';
-    for(let i=1;i<=52;i++) html += `<option value="${i}">${i}</option>`;
-    sel.innerHTML = html;
-  },
-
-  toggleTimeRow(){
-    // nothing fancy for now (all jobs can have start/stop)
-  },
-
-  quickNewBatch(){
-    ui.nav('batches');
-    alert('Create a new batch here. It will appear in the job batch dropdown automatically.');
-  },
-
-  busy(on){ document.getElementById('busy').hidden = !on; },
-
-  toast(msg){ alert(msg); },
-
-  showModal(html){
-    const body = document.getElementById('modalBody');
-    body.innerHTML = html;
-    document.getElementById('modal').hidden = false;
-  },
-  hideModal(){ document.getElementById('modal').hidden = true; }
-};
-
-/* GEO & Weather */
-const geo = {
-  last:null,
-  capture(){
-    if(!navigator.geolocation){ ui.toast('Location not supported'); return; }
-    navigator.geolocation.getCurrentPosition(pos=>{
-      geo.last = {lat:pos.coords.latitude, lng:pos.coords.longitude};
-      document.getElementById('gpsText').textContent = `${geo.last.lat.toFixed(5)}, ${geo.last.lng.toFixed(5)}`;
-      jobs.autoName();
-    },()=>ui.toast('Could not get GPS'));
-  }
-};
-
-const weather = {
-  async fetchNow(){
-    try{
-      if(!navigator.geolocation) throw new Error('No geolocation');
-      navigator.geolocation.getCurrentPosition(async pos=>{
-        const {latitude, longitude} = pos.coords;
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
-        const r = await fetch(url); const j = await r.json();
-        const w = j.current_weather;
-        const text = `Temp ${w.temperature}°C, Wind ${w.windspeed} km/h, Dir ${w.winddirection}°`;
-        document.getElementById('weatherBox').textContent = text;
-      },()=>ui.toast('GPS required for weather'));
-    }catch(e){ ui.toast('Weather error'); }
-  }
-};
-
-/* Jobs + records */
-const jobs = {
-  _photo:null,
-
-  handlePhoto(input){
-    const f = input.files?.[0]; if(!f) return;
-    const reader = new FileReader();
-    reader.onload = e=>{
-      const img = new Image();
-      img.onload = ()=>{
-        const c = document.createElement('canvas');
-        const maxW = 1280, s = Math.min(1, maxW/img.width);
-        c.width = Math.round(img.width*s); c.height = Math.round(img.height*s);
-        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-        jobs._photo = c.toDataURL('image/jpeg', .8);
-        const prev = document.getElementById('photoPreview');
-        prev.src = jobs._photo; prev.hidden=false;
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(f);
-  },
-
-  autoName(){
-    const type = document.getElementById('jobType').value;
-    const loc = (document.getElementById('location').value||'').trim().replace(/\s+/g,'');
-    let start = document.getElementById('startTime').value;
-    if(!start){ const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); start=d.toISOString().slice(0,16); }
-    const dt = start.replace(/[-:T]/g,'').slice(0,8); // YYYYMMDD
-    const code = type==='Road Spray'?'R':(type==='Spot Spray'?'S':'I');
-    document.getElementById('jobName').value = `${loc||'LOC'} ${dt} ${code}`;
-  },
-
-  linkBothWays(job, linkedNamesOrIds){
-    if(!linkedNamesOrIds) return;
-    const tokens = linkedNamesOrIds.split(',').map(s=>s.trim()).filter(Boolean);
-    if(tokens.length===0) return;
-    const all = store.get('wt:jobs');
-    job.linked = job.linked || [];
-    tokens.forEach(tok=>{
-      const match = all.find(j=> (j.id+''===tok) || (j.name===tok));
-      if(match){
-        if(!job.linked.includes(match.id)) job.linked.push(match.id);
-        match.linked = match.linked||[];
-        if(!match.linked.includes(job.id)) match.linked.push(job.id);
-      }
-    });
-    store.set('wt:jobs', all);
-  },
-
-  save(status){
-    ui.busy(true);
-    setTimeout(()=>{
-      const job = {
-        id: Date.now(),
-        name: document.getElementById('jobName').value.trim(),
-        councilNo: document.getElementById('councilNo').value.trim(),
-        type: document.getElementById('jobType').value,
-        location: document.getElementById('location').value.trim() || 'Unknown',
-        start: document.getElementById('startTime').value || null,
-        stop: document.getElementById('stopTime').value || null,
-        weed: document.getElementById('weedSelect').value || '',
-        batchId: document.getElementById('batchSelect').value || '',
-        notes: document.getElementById('notes').value || '',
-        lat: geo.last?.lat ?? null,
-        lng: geo.last?.lng ?? null,
-        photo: jobs._photo || null,
-        status,
-        createdAt: new Date().toISOString(),
-        lastEdited: new Date().toISOString(),
-        linked: []
-      };
-
-      const editId = localStorage.getItem('wt:editId');
-      if(editId){
-        let arr = store.get('wt:jobs'); const i = arr.findIndex(x=>x.id==editId);
-        if(i>-1){ job.id = +editId; job.createdAt = arr[i].createdAt; arr[i]=job; store.set('wt:jobs', arr); }
-        localStorage.removeItem('wt:editId');
-      }else{
-        store.push('wt:jobs', job);
-      }
-
-      // link both ways (inspections -> jobs etc.)
-      jobs.linkBothWays(job, document.getElementById('linkedJobs').value);
-
-      // link job to batch
-      if(job.batchId){
-        const all = store.get('wt:batches');
-        const b = all.find(x=>x.id==job.batchId);
-        if(b){
-          b.jobIds = b.jobIds||[];
-          if(!b.jobIds.includes(job.id)) b.jobIds.push(job.id);
-          store.set('wt:batches', all);
-        }
-      }
-
-      // reminder
-      const weeks = parseInt(document.getElementById('followWeeks').value||'0',10);
-      if(weeks>0){
-        const due = new Date(Date.now() + weeks*7*24*3600*1000).toISOString();
-        reminders.addSilent(`Follow-up: ${job.name}`, due);
-      }
-
-      ui.populateBatches();
-      ui.busy(false);
-      ui.toast(status==='draft'?'📝 Draft saved':'✅ Saved');
-      records.render();
-      mapView.refresh();
-      ui.nav('records');
-    }, 500);
-  }
-};
-
-const records = {
-  filter(){
-    const type = document.getElementById('rType').value;
-    const status = document.getElementById('rStatus').value;
-    const weed = document.getElementById('rWeed').value;
-    const from = document.getElementById('rFrom').value;
-    const to   = document.getElementById('rTo').value;
-    const q = (document.getElementById('rQuery').value||'').toLowerCase();
-
-    return store.get('wt:jobs').filter(j=>{
-      if(type && j.type!==type) return false;
-      if(status && j.status!==status) return false;
-      if(weed && j.weed!==weed) return false;
-      if(from && new Date(j.createdAt) < new Date(from)) return false;
-      if(to   && new Date(j.createdAt) > new Date(to+'T23:59:59')) return false;
-      if(q && !(`${j.name} ${j.location}`.toLowerCase().includes(q))) return false;
-      return true;
-    }).sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
-  },
-
-  render(){
-    const list = document.getElementById('recordsList'); list.innerHTML='';
-    const rows = records.filter();
-    if(rows.length===0){ list.innerHTML = '<div class="card">No records.</div>'; return; }
-    rows.forEach(r=>{
-      const card = document.createElement('div'); card.className='card';
-      card.innerHTML = `
-        <div class="row">
-          <strong>${r.name}</strong>
-          <span class="tag">${r.type}</span>
-          <span class="tag">${r.status}</span>
-          ${r.weed?`<span class="tag">${r.weed}</span>`:''}
-        </div>
-        <div class="row">
-          <button class="btn small blue" onclick="records.open(${r.id})">Open</button>
-        </div>`;
-      list.appendChild(card);
-    });
-  },
-
-  open(id){
-    const j = store.get('wt:jobs').find(x=>x.id===id); if(!j) return;
-    const linked = (j.linked||[]).map(k=>{
-      const t = store.get('wt:jobs').find(x=>x.id===k);
-      return t?`<button class="btn small gray" onclick="records.open(${t.id})">${t.name}</button>`:'';
-    }).join(' ');
-
-    const photo = j.photo? `<img class="thumb" src="${j.photo}"/>` : '';
-    const batchBtn = j.batchId? `<button class="btn small teal" onclick="batches.open('${j.batchId}')">Batch #${j.batchId}</button>`:'<span class="muted">No batch</span>';
-    const navBtn = (j.lat && j.lng)? `<button class="btn small blue" onclick="mapView.nav(${j.lat},${j.lng})">🧭 Navigate</button>` : '';
-
-    ui.showModal(`
-      <h3>${j.name}</h3>
-      <div class="row">
-        <span class="tag">${j.type}</span>
-        <span class="tag">${j.status}</span>
-      </div>
-      <p><b>Weed:</b> ${j.weed||'—'}</p>
-      <p><b>Road/Location:</b> ${j.location}</p>
-      <p><b>Weather:</b> ${document.getElementById('weatherBox')?.textContent||'—'}</p>
-      <p><b>Batch:</b> ${batchBtn}</p>
-      <p><b>Start:</b> ${j.start||'—'} &nbsp; <b>Stop:</b> ${j.stop||'—'}</p>
-      <p><b>Council #:</b> ${j.councilNo||'—'}</p>
-      <p><b>Notes:</b> ${j.notes||'—'}</p>
-      <p><b>Linked Jobs:</b> ${linked || '—'}</p>
-      ${photo}
-      <div class="row">
-        <button class="btn small gold" onclick="records.edit(${j.id})">✏️ Edit</button>
-        <button class="btn small gray" onclick="records.remove(${j.id})">🗑️ Delete</button>
-        ${navBtn}
-        <button class="btn small" onclick="ui.hideModal()">Close</button>
-      </div>
-      <div class="muted">Last edited: ${new Date(j.lastEdited||j.createdAt).toLocaleString()}</div>
-    `);
-  },
-
-  edit(id){
-    const r = store.get('wt:jobs').find(x=>x.id===id); if(!r) return;
-    document.getElementById('jobType').value = r.type;
-    document.getElementById('location').value = r.location;
-    document.getElementById('startTime').value = r.start||'';
-    document.getElementById('stopTime').value = r.stop||'';
-    document.getElementById('weedSelect').value = r.weed||'';
-    document.getElementById('batchSelect').value = r.batchId||'';
-    document.getElementById('notes').value = r.notes||'';
-    document.getElementById('councilNo').value = r.councilNo||'';
-    document.getElementById('jobName').value = r.name||'';
-    document.getElementById('linkedJobs').value = (r.linked||[]).map(id=>{
-      const t = store.get('wt:jobs').find(x=>x.id===id);
-      return t? t.name : id;
-    }).join(', ');
-    geo.last = (r.lat&&r.lng)?{lat:r.lat,lng:r.lng}:null;
-    localStorage.setItem('wt:editId', id);
-    ui.hideModal();
-    ui.nav('create');
-  },
-
-  remove(id){
-    if(!confirm('Delete this record?')) return;
-    store.set('wt:jobs', store.get('wt:jobs').filter(x=>x.id!==id));
-    ui.hideModal();
-    records.render(); mapView.refresh();
-  }
-};
-
-/* Batches */
-const batches = {
-  ensureRows(){
-    const c = document.getElementById('chemRows'); if(!c) return;
-    if(!c.children.length){ for(let i=0;i<4;i++) batches.addRow(); }
-    batches.updateRowCount();
-  },
-  addRow(){
-    const cont = document.getElementById('chemRows');
-    if(cont.children.length>=10){ ui.toast('Max 10 chemicals'); return; }
-    const row = document.createElement('div'); row.className='chemRow';
-    row.innerHTML = `
-      <select class="chemName">${inventory.optionsHtml()}</select>
-      <input class="chemRate" type="number" min="0" step="0.01" placeholder="Rate per 100 L"/>
-    `;
-    cont.appendChild(row); batches.updateRowCount();
-  },
-  resetRows(){
-    const cont = document.getElementById('chemRows'); cont.innerHTML=''; batches.ensureRows();
-  },
-  updateRowCount(){ const c=document.getElementById('chemRowCount'); if(c) c.textContent = `${document.getElementById('chemRows').children.length}/10`; },
-  add(){
-    const id = (document.getElementById('batchNo').value || Date.now()).toString();
-    const totalL = Number(document.getElementById('mixTotal').value||0);
-    const rows = [...document.querySelectorAll('#chemRows .chemRow')];
-    const ch = rows.map(r=>{
-      const name = r.querySelector('.chemName').value;
-      const rate = Number(r.querySelector('.chemRate').value||0);
-      return name? {name, rate} : null;
-    }).filter(Boolean);
-
-    const breakdown = ch.map(c=>{
-      const totalUsed = (c.rate||0) * (totalL/100);
-      inventory.deduct(c.name, totalUsed);
-      return {...c, totalUsed};
-    });
-
-    const batch = {
-      id, totalL, remaining: totalL, chems: breakdown, jobIds: [],
-      createdAt: new Date().toISOString(), lastEdited: new Date().toISOString()
-    };
-    const all = store.get('wt:batches'); all.push(batch); store.set('wt:batches', all);
-    ui.toast(`Batch #${id} added`);
-    inventory.render(); inventory.renderProc(); ui.populateBatches(); batches.render();
-  },
-  render(){
-    const list = document.getElementById('batchList'); list.innerHTML='';
-    const q=(document.getElementById('bQuery').value||'').toLowerCase();
-    const from=document.getElementById('bFrom').value, to=document.getElementById('bTo').value;
-    const all = store.get('wt:batches').filter(b=>{
-      if(q && !(b.id+'').toLowerCase().includes(q)) return false;
-      if(from && new Date(b.createdAt) < new Date(from)) return false;
-      if(to && new Date(b.createdAt) > new Date(to+'T23:59:59')) return false;
-      return true;
-    }).sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
-    if(all.length===0){ list.innerHTML='<div class="card">No batches yet.</div>'; return; }
-    all.forEach(b=>{
-      const card=document.createElement('div'); card.className='card';
-      if(b.remaining<=0) card.style.border='1px solid #a33';
-      card.innerHTML = `
-        <div class="row"><strong>${b.id}</strong></div>
-        <div class="row"><button class="btn small blue" onclick="batches.open('${b.id}')">Open</button></div>
-      `;
-      list.appendChild(card);
-    });
-  },
-  open(id){
-    const b = store.get('wt:batches').find(x=>x.id==id); if(!b) return;
-    const chems = b.chems.map((c,i)=>`<div class="row"> ${i+1}️⃣ <b>${c.name}</b> — ${c.rate||0} / 100L → <b>${c.totalUsed.toFixed(2)}</b></div>`).join('');
-    const links = (b.jobIds||[]).map(jid=>{
-      const j = store.get('wt:jobs').find(x=>x.id===jid);
-      return j? `<button class="btn small gray" onclick="records.open(${j.id})">${j.name}</button>`:'';
-    }).join(' ');
-
-    ui.showModal(`
-      <h3>Batch #${b.id}</h3>
-      <p><b>Created:</b> ${new Date(b.createdAt).toLocaleString()}</p>
-      <p><b>Last Edited:</b> ${new Date(b.lastEdited||b.createdAt).toLocaleString()}</p>
-      <p><b>Total Mix:</b> ${b.totalL} L &nbsp; <b>Remaining:</b> ${b.remaining} L</p>
-      <h4>Chemicals</h4>
-      ${chems || '<div class="muted">None</div>'}
-      <h4>Linked Jobs</h4>
-      <div class="row">${links || '<span class="muted">No linked jobs</span>'}</div>
-      <div class="row">
-        <button class="btn small gold" onclick="batches.consumePrompt('${b.id}')">Use (custom L)</button>
-        <button class="btn small gray" onclick="ui.hideModal()">Close</button>
-      </div>
-    `);
-  },
-  consumePrompt(id){
-    const v = Number(prompt('Litres to deduct?')||'0'); if(!v) return;
-    const all = store.get('wt:batches'); const b = all.find(x=>x.id==id); if(!b) return;
-    b.remaining = Math.max(0, b.remaining - v);
-    b.lastEdited = new Date().toISOString();
-    store.set('wt:batches', all);
-    ui.hideModal(); batches.render();
-  }
-};
-
-/* Inventory & procurement */
-const inventory = {
-  ensureSeeded(){ if(!localStorage.getItem('wt:chem')) store.set('wt:chem', chemicalsSeed()); },
-  optionsHtml(){ return store.get('wt:chem').map(c=>`<option>${c.name}</option>`).join(''); },
-  add(){
-    const name=document.getElementById('invName').value.trim();
-    const active=document.getElementById('invActive').value.trim();
-    const qty=Number(document.getElementById('invQty').value||0);
-    if(!name) return ui.toast('Chemical name required');
-    const list=store.get('wt:chem'); const ex=list.find(x=>x.name.toLowerCase()===name.toLowerCase());
-    if(ex){ ex.qty=(ex.qty||0)+qty; if(active) ex.active=active; }
-    else list.push({name,active,qty});
-    store.set('wt:chem', list); inventory.render();
-  },
-  deduct(name, amount){
-    const list=store.get('wt:chem'); const ex=list.find(x=>x.name===name);
-    if(ex){ ex.qty=Math.max(0,(ex.qty||0)-amount); }
-    store.set('wt:chem', list); inventory.render(); inventory.renderProc();
-  },
-  applyThreshold(){
-    const th=Number(document.getElementById('lowStock').value||0);
-    store.set('wt:low', th); inventory.renderProc(); ui.toast('Threshold set');
-  },
-  render(){
-    const list = document.getElementById('inventoryList'); list.innerHTML='';
-    const data = store.get('wt:chem');
-    if(data.length===0){ list.innerHTML='<div class="card">No chemicals.</div>'; return; }
-    data.forEach(c=>{
-      const card = document.createElement('div'); card.className='card';
-      card.innerHTML = `
-        <div class="row">
-          <strong class="chem-link" onclick="inventory.show('${c.name.replace(/'/g,"\\'")}')">${c.name}</strong>
-          <span class="tag">${c.active||'—'}</span>
-          <span class="tag">Qty: ${(c.qty||0).toFixed(2)}</span>
-        </div>`;
-      list.appendChild(card);
-    });
-  },
-  renderProc(){
-    const list = document.getElementById('procList'); if(!list) return; list.innerHTML='';
-    const th = Number(store.get('wt:low')||0);
-    const data = store.get('wt:chem').filter(c=> th>0 && (c.qty||0) <= th*5);
-    if(data.length===0){ list.innerHTML='<div class="card">Nothing to reorder.</div>'; return; }
-    data.forEach(c=>{
-      const card = document.createElement('div'); card.className='card';
-      card.innerHTML = `🛒 <b>${c.name}</b> — ${(c.qty||0).toFixed(2)} left (threshold ≈ ${th} drums)`;
-      list.appendChild(card);
-    });
-  },
-  show(name){
-    const c = store.get('wt:chem').find(x=>x.name===name); if(!c) return;
-    const used = (store.get('wt:batches')||[])
-      .filter(b=> (b.chems||[]).some(ch=>ch.name===name))
-      .map(b=>`Batch #${b.id}: ${(b.chems.find(ch=>ch.name===name).totalUsed).toFixed(2)} used`).join('<br>') || '—';
-    ui.showModal(`
-      <h3>${c.name}</h3>
-      <p><b>Active:</b> ${c.active||'—'}</p>
-      <p><b>In stock:</b> ${(c.qty||0).toFixed(2)}</p>
-      <p><b>Usage:</b><br>${used}</p>
-      <div class="row-inline">
-        <input id="chemAdj" type="number" step="0.1" placeholder="Qty"/>
-        <button class="btn small teal" onclick="inventory.adjust('${c.name}', +document.getElementById('chemAdj').value)">➕ Add</button>
-        <button class="btn small orange" onclick="inventory.adjust('${c.name}', -Math.abs(+document.getElementById('chemAdj').value||0))">➖ Use</button>
-        <button class="btn small gray" onclick="ui.hideModal()">Close</button>
-      </div>
-    `);
-  },
-  adjust(name, delta){
-    if(!delta) return;
-    const list=store.get('wt:chem'); const ex=list.find(x=>x.name===name); if(!ex) return;
-    ex.qty = Math.max(0,(ex.qty||0)+delta);
-    store.set('wt:chem', list); ui.hideModal(); inventory.render(); inventory.renderProc();
-  }
-};
-
-/* Weeds */
-const weeds = {
-  ensureSeeded(){ if(!localStorage.getItem('wt:weeds')) store.set('wt:weeds', weedsSeed()); },
-  getAll(){ return store.get('wt:weeds'); },
-  getGrouped(){
-    const data = weeds.getAll();
-    const nox = data.filter(w=>w.noxious).sort((a,b)=>a.name.localeCompare(b.name));
-    const other = data.filter(w=>!w.noxious).sort((a,b)=>a.name.localeCompare(b.name));
-    return [...nox, ...other];
-  }
-};
-
-/* Map */
-const mapView = {
-  map:null, markers:[],
-  initOnce(){
-    if(!mapView.map){
-      mapView.map = L.map('mapCanvas',{zoomControl:true});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(mapView.map);
-      mapView.locate(true);
-    }
-    ui.populateWeeds();
-    mapView.refresh();
-  },
-  locate(first=false){
-    if(navigator.geolocation){
-      navigator.geolocation.getCurrentPosition(pos=>{
-        mapView.map.setView([pos.coords.latitude,pos.coords.longitude], first? 13 : mapView.map.getZoom()||13);
-      }, ()=> mapView.map.setView([-33.8688,151.2093], 11));
-    }else mapView.map.setView([-33.8688,151.2093], 11);
-  },
-  color(t){ return t==='Road Spray'?'yellow':(t==='Spot Spray'?'green':'blue'); },
-  refresh(){
-    // clear
-    mapView.markers.forEach(m=>m.remove()); mapView.markers=[];
-    const type = document.getElementById('mType').value;
-    const weed = document.getElementById('mWeed').value;
-    const status = document.getElementById('mStatus').value;
-    const batch = (document.getElementById('mBatch').value||'').trim();
-    const from = document.getElementById('mFrom').value;
-    const to   = document.getElementById('mTo').value;
-    const q = (document.getElementById('mQuery').value||'').toLowerCase();
-
-    store.get('wt:jobs').forEach(j=>{
-      if(type && j.type!==type) return;
-      if(status && j.status!==status) return;
-      if(weed && j.weed!==weed) return;
-      if(batch && j.batchId!==batch) return;
-      if(from && new Date(j.createdAt) < new Date(from)) return;
-      if(to && new Date(j.createdAt) > new Date(to+'T23:59:59')) return;
-      if(q && !(`${j.name} ${j.location}`.toLowerCase().includes(q))) return;
-      if(j.lat && j.lng){
-        const m = L.circleMarker([j.lat,j.lng],{radius:7,color:mapView.color(j.type),fillOpacity:.85})
-          .addTo(mapView.map)
-          .bindPopup(`<b>${j.name}</b><br>${j.type} · ${j.status}<br>${j.location}<br>
-          <button onclick="records.open(${j.id})">Open</button> &nbsp;
-          <button onclick="mapView.nav(${j.lat},${j.lng})">Navigate</button>`);
-        mapView.markers.push(m);
-      }
-    });
-  },
-  nav(lat,lng){ window.open(`https://maps.apple.com/?daddr=${lat},${lng}`,'_blank'); }
-};
-
-/* Storage helper */
-const store = {
-  get(k){ return JSON.parse(localStorage.getItem(k)||'[]'); },
-  set(k,v){ localStorage.setItem(k, JSON.stringify(v)); },
-  push(k,obj){ const arr = store.get(k); arr.push(obj); store.set(k,arr); }
-};
-
-window.addEventListener('load', ()=>{
-  batches.ensureRows();
-  ui.start();
+  // Populate initial weeds & batches into selects
+  refreshWeedSelect();
+  refreshBatchSelect();
 });
+
+/* ---------------- Helpers ---------------- */
+function handleLocate(){
+  getGPSLocation(c=>{
+    qs("#gpsPreview").textContent = `GPS: ${c.lat}, ${c.lng}`;
+    qs("#gpsPreview").dataset.lat = c.lat;
+    qs("#gpsPreview").dataset.lng = c.lng;
+  });
+}
+async function handleWeather(){
+  const lat = +qs("#gpsPreview").dataset.lat || -34.75;
+  const lng = +qs("#gpsPreview").dataset.lng || 148.65;
+  const w = await fetchWeather(lat,lng);
+  qs("#weatherPreview").textContent = `🌡 ${w.temp}°C  💨 ${w.wind} km/h  RH ${w.humidity}%`;
+  qs("#weatherPreview").dataset.weather = JSON.stringify(w);
+}
+function handleAutoName(){
+  const type = qs("#jobType").value;
+  const loc  = (qs("#locationInput").value||"Location").trim().replace(/\s+/g,"_");
+  const date = new Date().toISOString().slice(0,10);
+  const job = `${loc}_${date}_${type}`;
+  qs("#jobNamePreview").textContent = `Name: ${job}`;
+  qs("#jobNamePreview").dataset.name = job;
+}
+function refreshWeedSelect(){
+  const weeds = load(STORAGE_KEYS.weeds);
+  const sel = qs("#weedSelect");
+  sel.innerHTML = "";
+  weeds.forEach(w=>{
+    const opt = document.createElement("option");
+    opt.textContent = w.name; opt.value = w.name;
+    sel.appendChild(opt);
+  });
+}
+function refreshBatchSelect(){
+  const list = load(STORAGE_KEYS.batches);
+  const sel = qs("#batchSelect");
+  sel.innerHTML = "<option value=''>— None —</option>";
+  list.forEach(b=>{
+    const opt = document.createElement("option");
+    opt.textContent = `${b.id} • ${b.totalMade}L • Rem ${b.remaining}L`;
+    opt.value = b.id;
+    sel.appendChild(opt);
+  });
+}
+
+/* ---------------- Save Job ---------------- */
+function handleSaveJob(isDraft){
+  const type = qs("#jobType").value;
+  const name = qs("#jobNamePreview").dataset.name || "Untitled";
+  const weed = qs("#weedSelect").value || "";
+  const batchId = qs("#batchSelect").value || "";
+  const notes = qs("#jobNotes").value||"";
+  const start = qs("#startTime").value||"";
+  const stop  = qs("#stopTime").value||"";
+  const lat = +(qs("#gpsPreview").dataset.lat||0);
+  const lng = +(qs("#gpsPreview").dataset.lng||0);
+  const weather = JSON.parse(qs("#weatherPreview").dataset.weather||"{}");
+  const reminderWeeks = +qs("#reminderWeeks").value||0;
+
+  const job = {
+    id: generateID("JOB"),
+    name, type, weed, batchId, notes, start, stop, lat, lng,
+    date: new Date().toISOString().slice(0,10),
+    time: new Date().toTimeString().slice(0,5),
+    weather,
+    status: isDraft ? "Draft" : "Incomplete",
+    linkedJobs: []
+  };
+  const jobs = load(STORAGE_KEYS.jobs); jobs.push(job); save(STORAGE_KEYS.jobs, jobs);
+
+  if(reminderWeeks>0){
+    const due = new Date(); due.setDate(due.getDate()+7*reminderWeeks);
+    addReminder({ id:generateID("REM"), task:name, date:due.toISOString(), alerted:false });
+  }
+
+  alert(isDraft ? "Draft saved." : "Job saved.");
+  showPage("records");
+}
+
+/* ---------------- Records ---------------- */
+function renderRecords(){
+  const q = (qs("#recordsSearch").value||"").toLowerCase();
+  const type = qs("#recordsType").value;
+  const status = qs("#recordsStatus").value;
+  const date = qs("#recordsDate").value;
+
+  let jobs = load(STORAGE_KEYS.jobs);
+  if(q) jobs = jobs.filter(j=>[j.name,j.weed].join(" ").toLowerCase().includes(q));
+  if(type!=="All") jobs = jobs.filter(j=>j.type===type);
+  if(status!=="All") jobs = jobs.filter(j=>j.status===status);
+  if(date) jobs = jobs.filter(j=>j.date===date);
+
+  const list = qs("#recordsList"); list.innerHTML="";
+  if(!jobs.length){ list.innerHTML = `<div class="muted">No records.</div>`; return;}
+
+  jobs.forEach(j=>{
+    const card = document.createElement("div");
+    card.className="record-card";
+    card.innerHTML = `
+      <h3>${j.name}</h3>
+      <div>
+        <span class="tag ${j.status==='Complete'?'complete':j.status==='Draft'?'draft':'incomplete'}">${j.status}</span>
+        <span class="tag">${j.type}</span>
+        ${j.weed?`<span class="tag">${j.weed}</span>`:""}
+      </div>
+      <div class="muted small">${j.date} ${j.time}</div>
+      <div class="row-compact" style="margin-top:8px">
+        <button class="action" onclick="openJob('${j.id}')">Open</button>
+        ${j.lat&&j.lng?`<button class="action" onclick="openAppleMaps(${j.lat},${j.lng})">Navigate</button>`:""}
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+/* Job modal */
+function openJob(id){
+  const j = load(STORAGE_KEYS.jobs).find(x=>x.id===id); if(!j) return;
+  const m = qs("#modal");
+  m.innerHTML = `
+    <h3>${j.name}</h3>
+    <div class="grid-2">
+      <div>
+        <div><b>Type:</b> ${j.type}</div>
+        <div><b>Status:</b> ${j.status}</div>
+        <div><b>Weed:</b> ${j.weed||"—"}</div>
+        <div><b>Batch:</b> ${j.batchId||"—"}</div>
+        <div><b>Start/Stop:</b> ${j.start||"—"} → ${j.stop||"—"}</div>
+      </div>
+      <div>
+        <div><b>Date:</b> ${j.date} ${j.time}</div>
+        <div><b>GPS:</b> ${j.lat||"—"}, ${j.lng||"—"}</div>
+        <div><b>Weather:</b> ${j.weather?.temp??"—"}°C, ${j.weather?.wind??"—"} km/h</div>
+        <div><b>Notes:</b> ${j.notes||"—"}</div>
+      </div>
+    </div>
+    <div class="row-right" style="margin-top:10px">
+      <button class="action" onclick="markComplete('${j.id}')">Mark Complete</button>
+      <button class="action" onclick="editJob('${j.id}')">Edit</button>
+      <button class="action ghost" onclick="closeModal()">Close</button>
+    </div>
+  `;
+  m.classList.add("active");
+}
+function closeModal(){ qs("#modal").classList.remove("active"); }
+function markComplete(id){
+  const jobs = load(STORAGE_KEYS.jobs);
+  const i = jobs.findIndex(j=>j.id===id); if(i<0) return;
+  jobs[i].status="Complete"; save(STORAGE_KEYS.jobs, jobs);
+  closeModal(); renderRecords();
+}
+function editJob(id){
+  const j = load(STORAGE_KEYS.jobs).find(x=>x.id===id); if(!j) return;
+  showPage("createTask");
+  qs("#jobType").value = j.type;
+  qs("#locationInput").value = j.name.split("_")[0].replace(/_/g," ");
+  qs("#weedSelect").value = j.weed||"";
+  qs("#batchSelect").value = j.batchId||"";
+  qs("#jobNotes").value = j.notes||"";
+  qs("#startTime").value = j.start||"";
+  qs("#stopTime").value  = j.stop||"";
+  qs("#gpsPreview").textContent = `GPS: ${j.lat||"—"}, ${j.lng||"—"}`;
+  qs("#gpsPreview").dataset.lat = j.lat||"";
+  qs("#gpsPreview").dataset.lng = j.lng||"";
+  qs("#jobNamePreview").textContent = `Name: ${j.name}`;
+  qs("#jobNamePreview").dataset.name = j.name;
+  qs("#weatherPreview").textContent = j.weather?`🌡 ${j.weather.temp}°C  💨 ${j.weather.wind} km/h`:"—";
+  qs("#weatherPreview").dataset.weather = JSON.stringify(j.weather||{});
+  // On save, we update instead of duplicating:
+  const originalSave = qs("#btnSaveJob").onclick;
+  qs("#btnSaveJob").onclick = ()=>{
+    const jobs2 = load(STORAGE_KEYS.jobs);
+    const k = jobs2.findIndex(x=>x.id===id);
+    if(k>-1){
+      jobs2[k] = {
+        ...jobs2[k],
+        type: qs("#jobType").value,
+        name: qs("#jobNamePreview").dataset.name || jobs2[k].name,
+        weed: qs("#weedSelect").value,
+        batchId: qs("#batchSelect").value,
+        notes: qs("#jobNotes").value,
+        start: qs("#startTime").value,
+        stop: qs("#stopTime").value,
+        lat: +(qs("#gpsPreview").dataset.lat||0),
+        lng: +(qs("#gpsPreview").dataset.lng||0),
+        weather: JSON.parse(qs("#weatherPreview").dataset.weather||"{}")
+      };
+      save(STORAGE_KEYS.jobs, jobs2);
+      alert("Job updated.");
+      showPage("records");
+    }
+    qs("#btnSaveJob").onclick = originalSave; // restore
+  };
+  closeModal();
+}
+
+/* ---------------- Batches ---------------- */
+function openCreateBatch(){
+  const m = qs("#modal");
+  // allow up to 10 chemicals
+  const chemOptions = load(STORAGE_KEYS.chems).map(c=>`<option value="${c.name}">${c.name}</option>`).join("");
+  const chemRows = Array.from({length:10}).map((_,i)=>`
+    <div class="row-compact">
+      <select class="batchChem" data-i="${i}">
+        <option value="">— Chemical —</option>${chemOptions}
+      </select>
+      <input class="ratePer100" data-i="${i}" type="number" step="0.01" placeholder="Rate /100L"/>
+      <input class="totalAdded" data-i="${i}" type="number" step="0.01" placeholder="Total added (L/kg)"/>
+    </div>
+  `).join("");
+
+  m.innerHTML = `
+    <h3>Create Batch</h3>
+    <div class="row-compact">
+      <input id="batchTotal" type="number" step="1" placeholder="Total made (L)"/>
+    </div>
+    ${chemRows}
+    <div class="row-right" style="margin-top:10px">
+      <button class="action" onclick="saveBatch()">Save Batch</button>
+      <button class="action ghost" onclick="closeModal()">Close</button>
+    </div>
+  `;
+  m.classList.add("active");
+}
+function saveBatch(){
+  const totalMade = +qs("#batchTotal").value||0;
+  const chems = [];
+  qsa(".batchChem").forEach((sel,i)=>{
+    const name = sel.value;
+    const rate = +qs(`.ratePer100[data-i="${i}"]`).value||0;
+    const total = +qs(`.totalAdded[data-i="${i}"]`).value||0;
+    if(name) chems.push({name, ratePer100:rate, totalAdded:total});
+  });
+  const remaining = totalMade;
+  const id = generateID("BATCH");
+  const batch = { id, totalMade, remaining, chems, date:new Date().toISOString().slice(0,10) };
+
+  const list = load(STORAGE_KEYS.batches); list.push(batch); save(STORAGE_KEYS.batches, list);
+
+  // Deduct inventory by totals entered
+  const inv = load(STORAGE_KEYS.chems);
+  chems.forEach(c=>{
+    const i = inv.findIndex(x=>x.name===c.name);
+    if(i>-1){
+      inv[i].quantity = Math.max(0, (inv[i].quantity||0) - (c.totalAdded||0));
+    }
+  });
+  save(STORAGE_KEYS.chems, inv);
+
+  alert("Batch saved.");
+  closeModal();
+  refreshBatchSelect();
+  renderBatches();
+}
+function renderBatches(){
+  const q = (qs("#batchSearch").value||"").toLowerCase();
+  const date = qs("#batchDateFilter").value;
+  let list = load(STORAGE_KEYS.batches);
+  if(q) list = list.filter(b=>b.id.toLowerCase().includes(q));
+  if(date) list = list.filter(b=>b.date===date);
+
+  const wrap = qs("#batchList"); wrap.innerHTML="";
+  if(!list.length){ wrap.innerHTML=`<div class="muted">No batches.</div>`; return; }
+
+  list.forEach(b=>{
+    const card = document.createElement("div");
+    card.className="batch-card";
+    const chemLines = b.chems.map(c=>`<div>• ${c.name} — ${c.ratePer100}/100L — total ${c.totalAdded}</div>`).join("");
+    card.innerHTML = `
+      <div><b>${b.id}</b></div>
+      <div class="muted small">${b.date}</div>
+      <div>Total: ${b.totalMade} L • Remaining: ${b.remaining} L</div>
+      <div style="margin-top:6px">${chemLines||"<i>No chemicals recorded</i>"}</div>
+    `;
+    wrap.appendChild(card);
+  });
+}
+
+/* ---------------- Inventory & Procurement ---------------- */
+function renderChemInventory(){
+  const q = (qs("#chemSearch").value||"").toLowerCase();
+  const list = load(STORAGE_KEYS.chems).filter(c=>!q || c.name.toLowerCase().includes(q));
+  const wrap = qs("#chemList"); wrap.innerHTML="";
+  list.forEach(c=>{
+    const low = c.quantity<=c.low;
+    const card = document.createElement("div");
+    card.className="chem-card";
+    card.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div><b>${c.name}</b></div>
+          <div class="muted small">${c.active}</div>
+        </div>
+        <div>${c.quantity} ${c.unit}</div>
+      </div>
+      ${low?`<div class="tag draft" style="margin-top:6px">Low stock (≤ ${c.low} ${c.unit})</div>`:""}
+    `;
+    wrap.appendChild(card);
+  });
+}
+function renderProcurement(){
+  const list = load(STORAGE_KEYS.chems).filter(c=>c.quantity<=c.low);
+  const wrap = qs("#procureList"); wrap.innerHTML="";
+  if(!list.length){ wrap.innerHTML = `<div class="muted">No items need re-ordering.</div>`; return; }
+  list.forEach(c=>{
+    const card = document.createElement("div");
+    card.className="chem-card";
+    card.innerHTML = `<div><b>${c.name}</b> — Need to reorder (current ${c.quantity}${c.unit}, min ${c.low}${c.unit})</div>`;
+    wrap.appendChild(card);
+  });
+}
+
+/* ---------------- Map ---------------- */
+function renderMap(){
+  const type = qs("#mapType").value;
+  const status = qs("#mapStatus").value;
+  const date = qs("#mapDate").value;
+
+  let jobs = load(STORAGE_KEYS.jobs);
+  if(type!=="All") jobs = jobs.filter(j=>j.type===type);
+  if(status==="Open") jobs = jobs.filter(j=>j.status!=="Complete");
+  if(status==="Closed") jobs = jobs.filter(j=>j.status==="Complete");
+  if(date) jobs = jobs.filter(j=>j.date===date);
+
+  plotJobs(jobs);
+}
+
+/* ---------------- Reminders ---------------- */
+function renderReminders(){
+  const wrap = qs("#reminderList"); wrap.innerHTML="";
+  const list = load(STORAGE_KEYS.reminders);
+  if(!list.length){ wrap.innerHTML = `<div class="muted">No reminders set.</div>`; return; }
+  list.forEach(r=>{
+    const card = document.createElement("div");
+    card.className="rem-card";
+    card.innerHTML = `
+      <div><b>${r.task}</b></div>
+      <div class="muted small">Due: ${new Date(r.date).toLocaleString()}</div>
+      <div class="row-right" style="margin-top:6px">
+        <button class="action" onclick="snoozeReminder('${r.id}',7)">Snooze 1w</button>
+        <button class="action danger" onclick="deleteReminder('${r.id}')">Dismiss</button>
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+}
+function snoozeReminder(id,weeks){
+  const list = load(STORAGE_KEYS.reminders);
+  const i = list.findIndex(r=>r.id===id); if(i<0) return;
+  const d = new Date(list[i].date); d.setDate(d.getDate()+7*weeks);
+  list[i].date = d.toISOString(); list[i].alerted=false;
+  save(STORAGE_KEYS.reminders, list);
+  renderReminders();
+}
+function deleteReminder(id){
+  removeReminder(id); renderReminders();
+}
