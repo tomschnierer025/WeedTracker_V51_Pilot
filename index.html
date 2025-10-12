@@ -1,36 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Weed Tracker V50 Pilot</title>
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Weed Tracker V55 Pilot</title>
+  <link rel="stylesheet" href="styles.css"/>
 
-  <!-- Leaflet for mapping -->
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- App scripts -->
+  <!-- App -->
   <script defer src="storage.js"></script>
   <script defer src="extras.js"></script>
   <script defer src="apps.js"></script>
 </head>
 <body>
-
   <!-- Splash -->
-  <div id="splash-screen" aria-hidden="true">
-    <h1>🌿 Weed Tracker V50 Pilot</h1>
-  </div>
+  <div id="splash-screen"><h1>🌿 Weed Tracker V55 Pilot</h1></div>
+
+  <!-- Global top-right Home -->
+  <button id="btnHomeTop" class="home-top" onclick="showPage('home')">🏠 Home</button>
 
   <!-- HOME -->
   <div id="home" class="page active">
-    <h2 class="app-title">Weed Tracker V50 Pilot</h2>
+    <h2 class="app-title">Weed Tracker V55 Pilot</h2>
     <div class="menu">
       <button id="btnCreateTask" class="tile tile-blue">🧾 Create Task</button>
       <button id="btnRecords" class="tile tile-green">📚 Records</button>
       <button id="btnInventory" class="tile tile-teal">🧪 Chemical Inventory</button>
       <button id="btnBatches" class="tile tile-purple">⚗️ Batches</button>
-      <button id="btnProcurement" class="tile tile-orange">🛒 Procurement List</button>
+      <button id="btnProcurement" class="tile tile-orange">🛒 Procurement</button>
       <button id="btnMapping" class="tile tile-yellow">🗺️ Mapping</button>
       <button id="btnReminders" class="tile tile-cyan">⏰ Reminders</button>
       <button id="btnSettings" class="tile tile-grey">⚙️ Settings</button>
@@ -50,7 +50,7 @@
 
     <div class="section">
       <div class="section-title">2) Location</div>
-      <input id="locationInput" placeholder="Road / Reserve / Site name" />
+      <input id="locationInput" placeholder="Road / Reserve / Site name"/>
       <div class="row-compact">
         <button class="action" id="btnLocate">Locate Me</button>
         <span id="gpsPreview" class="muted">GPS: —</span>
@@ -58,30 +58,38 @@
     </div>
 
     <div class="section">
-      <div class="section-title">3) Tracking</div>
+      <div class="section-title">3) Tracking (Roadside shows Start/Stop)</div>
       <div class="row-compact">
-        <label>Start:</label><input id="startTime" type="datetime-local"/>
-        <label>Stop:</label><input id="stopTime" type="datetime-local"/>
+        <label>Date:</label><input id="jobDate" type="date"/>
+        <label>Start:</label><input id="startTime" type="time"/>
+        <label>Finish:</label><input id="stopTime" type="time"/>
+      </div>
+      <div id="roadTracking" class="row-compact" style="display:none">
+        <button class="action" id="btnStartTrack">Start Tracking</button>
+        <button class="action" id="btnStopTrack" disabled>Stop Tracking</button>
+        <span id="trackInfo" class="muted">Route: —</span>
       </div>
     </div>
 
     <div class="section">
-      <div class="section-title">4) Job Name & Weather</div>
+      <div class="section-title">4) Auto Name & Weather</div>
       <div class="row-compact">
-        <button class="action" id="btnAutoName">Auto-Generate Name</button>
+        <button class="action" id="btnAutoName">Auto-Generate</button>
         <span id="jobNamePreview" class="muted">Name: —</span>
       </div>
-      <div class="row-compact">
-        <button class="action" id="btnWeather">Pull Weather</button>
-        <span id="weatherPreview" class="muted">—</span>
+      <div class="weather-grid">
+        <div class="wbox"><div class="wlabel">Temp</div><div id="wTemp" class="wval">—</div></div>
+        <div class="wbox"><div class="wlabel">Wind</div><div id="wWind" class="wval">—</div></div>
+        <div class="wbox"><div class="wlabel">Direction</div><div id="wDir" class="wval">—</div></div>
+        <div class="wbox"><div class="wlabel">Humidity</div><div id="wHum" class="wval">—</div></div>
       </div>
+      <button class="action" id="btnWeather">Pull Weather</button>
     </div>
 
     <div class="section">
       <div class="section-title">5) Weed & Batch</div>
       <input id="weedSearch" placeholder="Search weeds…"/>
       <select id="weedSelect"></select>
-
       <div class="row-compact">
         <label>Batch:</label>
         <select id="batchSelect"></select>
@@ -91,48 +99,43 @@
 
     <div class="section">
       <div class="section-title">6) Photos & Notes</div>
-      <input id="photoFile" type="file" accept="image/*" />
+      <input id="photoFile" type="file" accept="image/*"/>
       <textarea id="jobNotes" rows="4" placeholder="Notes…"></textarea>
+      <div class="row-compact">
+        <label>Link Job #:</label><input id="linkJobId" placeholder="Paste an existing Job ID to link"/>
+      </div>
+      <div class="row-compact">
+        <label>Status:</label>
+        <label><input type="radio" name="status" value="Incomplete" checked/> Incomplete</label>
+        <label><input type="radio" name="status" value="Complete"/> Complete</label>
+      </div>
     </div>
 
     <div class="section">
       <div class="section-title">7) Reminder</div>
       <div class="row-compact">
         <label>Follow-up (weeks):</label>
-        <select id="reminderWeeks">
-          <option value="0">No reminder</option>
-          <!-- 1..52 -->
-          <script>
-            for (let i=1;i<=52;i++){
-              document.write(`<option value="${i}">${i}</option>`);
-            }
-          </script>
-        </select>
+        <select id="reminderWeeks"><option value="0">No reminder</option></select>
       </div>
     </div>
 
     <div class="section">
       <button class="action success" id="btnSaveJob">Save</button>
       <button class="action" id="btnSaveDraft">Save as Draft</button>
-      <button class="action ghost" id="btnBackHome1">Home</button>
     </div>
   </div>
 
   <!-- RECORDS -->
   <div id="records" class="page">
     <div class="filters">
-      <input id="recordsSearch" placeholder="Search by name / road / weed…" />
-      <select id="recordsType">
-        <option>All</option><option>Inspection</option><option>SpotSpray</option><option>Roadside</option>
-      </select>
-      <select id="recordsStatus">
-        <option>All</option><option>Complete</option><option>Incomplete</option><option>Draft</option>
-      </select>
-      <input id="recordsDate" type="date" />
+      <input id="recordsSearch" placeholder="Search name / weed / road…"/>
+      <select id="recordsType"><option>All</option><option>Inspection</option><option>SpotSpray</option><option>Roadside</option></select>
+      <select id="recordsStatus"><option>All</option><option>Complete</option><option>Incomplete</option><option>Draft</option></select>
+      <label>From:</label><input id="recordsFrom" type="date"/>
+      <label>To:</label><input id="recordsTo" type="date"/>
       <button class="action" id="btnRecordsFilter">Search</button>
     </div>
     <div id="recordsList" class="list"></div>
-    <button class="action ghost" id="btnBackHome2">Home</button>
   </div>
 
   <!-- INVENTORY -->
@@ -142,62 +145,62 @@
       <button class="action" id="btnAddChem">Add Chemical</button>
     </div>
     <div id="chemList" class="list"></div>
-    <button class="action ghost" id="btnBackHome3">Home</button>
   </div>
 
   <!-- BATCHES -->
   <div id="batches" class="page">
     <div class="filters">
       <input id="batchSearch" placeholder="Search batch id…"/>
-      <input id="batchDateFilter" type="date" />
+      <label>From:</label><input id="batchFrom" type="date"/>
+      <label>To:</label><input id="batchTo" type="date"/>
       <button class="action" id="btnBatchFilter">Search</button>
       <button class="action" id="btnCreateBatch">Create Batch</button>
     </div>
     <div id="batchList" class="list"></div>
-    <button class="action ghost" id="btnBackHome4">Home</button>
   </div>
 
   <!-- PROCUREMENT -->
   <div id="procurement" class="page">
     <div id="procureList" class="list"></div>
-    <button class="action ghost" id="btnBackHome5">Home</button>
   </div>
 
-  <!-- MAPPING -->
+  <!-- MAP -->
   <div id="map" class="page">
     <div class="filters">
-      <select id="mapType">
-        <option>All</option><option>Inspection</option><option>SpotSpray</option><option>Roadside</option>
-      </select>
-      <select id="mapStatus">
-        <option>All</option><option>Open</option><option>Closed</option>
-      </select>
-      <input id="mapDate" type="date"/>
+      <select id="mapType"><option>All</option><option>Inspection</option><option>SpotSpray</option><option>Roadside</option></select>
+      <select id="mapStatus"><option>All</option><option>Open</option><option>Closed</option></select>
+      <label>From:</label><input id="mapFrom" type="date"/>
+      <label>To:</label><input id="mapTo" type="date"/>
       <button class="action" id="btnMapFilter">Filter</button>
       <button class="action" id="btnLocateMe">Locate Me</button>
     </div>
     <div id="mapView"></div>
-    <button class="action ghost" id="btnBackHome6">Home</button>
   </div>
 
   <!-- REMINDERS -->
   <div id="reminders" class="page">
     <div id="reminderList" class="list"></div>
-    <button class="action ghost" id="btnBackHome7">Home</button>
   </div>
 
   <!-- SETTINGS -->
   <div id="settings" class="page">
     <div class="section">
       <div class="section-title">Data</div>
-      <button class="action danger" id="btnClearData">Clear ALL Local Data</button>
-      <div class="muted small">Clears jobs, batches, records, pins & reminders. Leaves the chemical & weed libraries intact.</div>
+      <div class="row-compact">
+        <button class="action" id="btnExportJSON">Export JSON</button>
+        <button class="action" id="btnExportCSV">Export CSV</button>
+        <button class="action danger" id="btnClearData">Clear ALL Local Data</button>
+      </div>
+      <div class="muted small">Clears jobs, batches, reminders (keeps weed & chemical library).</div>
     </div>
-    <button class="action ghost" id="btnBackHome8">Home</button>
   </div>
 
-  <!-- Reusable Modal -->
+  <!-- Modal -->
   <div id="modal" class="popup" role="dialog" aria-modal="true"></div>
 
+  <script>
+    // Fill weeks 1..52 in <select>
+    (function(){const w=document.getElementById('reminderWeeks');for(let i=1;i<=52;i++){const o=document.createElement('option');o.value=i;o.textContent=i;w.appendChild(o);}})();
+  </script>
 </body>
 </html>
