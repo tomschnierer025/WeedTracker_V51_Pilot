@@ -146,9 +146,7 @@ function showPopup(title, body) {
     <button class="close-btn">Close</button>`;
   document.body.appendChild(popup);
   popup.querySelector(".close-btn").onclick = () => popup.remove();
-}
-
-// WeedTracker V55 Pilot – Full Build (Part 2 of 2)
+} // WeedTracker V55 Pilot – Full Build (Part 2 of 2)
 // UI wiring, forms, filters, popups, theme glue, and background sync helpers.
 // (Part 1 included Firebase init, data models, and core helpers.)
 
@@ -503,13 +501,13 @@ function renderBatches() {
 }
 
 function openBatchPopup(b) {
-  const chems = (b.chemicals || []).map(c =>
-    `<div class="kv"><span>${c.name}</span><span>${c.ratePer100} ${c.unit}/100L &nbsp; Total: ${c.totalUsed} L</span></div>`
-  ).join("") || "-";
+  const chems = (b.chemicals||[]).map(c =>
+    `<div class="kv"><span>${c.name}</span><span>${c.ratePer100} ${c.unit}/100L &nbsp;|&nbsp; Total: ${c.totalUsed||0} ${c.unit}</span></div>`
+  ).join("") || "—";
 
-  const jobsHtml = (b.linkedJobIds || []).map(id =>
+  const jobsHtml = (b.linkedJobIds||[]).map(id =>
     `<a href="#" data-job="${id}" class="lnk">Job ${id.slice(0,6)}</a>`
-  ).join(", ") || "-";
+  ).join(", ") || "—";
 
   const body = `
     <div class="kv"><span>Batch ID</span><span>${b.id?.slice(0,8) || "New"}</span></div>
@@ -517,19 +515,10 @@ function openBatchPopup(b) {
     <div class="kv"><span>Total Mix</span><span>${b.totalMix || 0} L</span></div>
     <div class="kv"><span>Remaining</span><span>${b.remainingMix ?? b.totalMix || 0} L</span></div>
     <hr/>
-    <div class="kv head"><span>Chemicals (rate & totals)</span></div>
+    <div class="kv head"><span>Chemicals (rate & totals)</span><span></span></div>
     ${chems}
     <hr/>
     <div class="kv"><span>Linked Jobs</span><span>${jobsHtml}</span></div>
-    <div class="grp">
-      <button id="edit-batch" class="btn">Edit</button>
-      <button id="close-batch" class="btn gray">Close</button>
-    </div>
-  `;
-
-  showPopup("Batch Details", body);
-}
-
     <hr/>
     <div class="grp">
       <button id="edit-batch" class="btn">Edit</button>
@@ -872,3 +861,5 @@ document.addEventListener("DOMContentLoaded", () => {
     }, () => {});
   }
 });
+
+
