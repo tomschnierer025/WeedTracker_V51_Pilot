@@ -515,7 +515,10 @@ function openBatchPopup(b) {
     <div class="kv"><span>Batch ID</span><span>${b.id?.slice(0,8) || "New"}</span></div>
     <div class="kv"><span>Date</span><span>${b.date || fmtDate(new Date())}</span></div>
     <div class="kv"><span>Total Mix</span><span>${b.totalMix || 0} L</span></div>
-    <div class="kv"><span>Remaining</span><span>${b.remainingMix ?? b.totalMix || 0} L</span></div>
+    const jobsHtml = (b.linkedJobIds||[]).map(id =>
+  `<a href="#" data-job="${id}" class="lnk">Job ${id.slice(0,6)}</a>`
+).join(", ") || "-";
+
     <hr/>
     <div class="kv head"><span>Chemicals (rate & totals)</span><span></span></div>
     ${chems}
