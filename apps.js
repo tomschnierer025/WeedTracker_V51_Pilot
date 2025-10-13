@@ -503,24 +503,11 @@ function renderBatches() {
 }
 
 function openBatchPopup(b) {
-  const chems = (b.chemicals||[]).map(c =>
-    `<div class="kv"><span>${c.name}</span><span>${c.ratePer100} ${c.unit}/100L &nbsp;|&nbsp; Total: ${c.totalUsed||0} ${c.unit}</span></div>`
-  ).join("") || "—";
-
-  const jobsHtml = (b.linkedJobIds||[]).map(id =>
-    `<a href="#" data-job="${id}" class="lnk">Job ${id.slice(0,6)}</a>`
-  ).join(", ") || "—";
-
-  const body = `
-    <div class="kv"><span>Batch ID</span><span>${b.id?.slice(0,8) || "New"}</span></div>
-    <div class="kv"><span>Date</span><span>${b.date || fmtDate(new Date())}</span></div>
-    <div class="kv"><span>Total Mix</span><span>${b.totalMix || 0} L</span></div>
-    function openBatchPopup(b) {
-  const chems = (b.chemicals||[]).map(c =>
+  const chems = (b.chemicals || []).map(c =>
     `<div class="kv"><span>${c.name}</span><span>${c.ratePer100} ${c.unit}/100L &nbsp; Total: ${c.totalUsed} L</span></div>`
   ).join("") || "-";
 
-  const jobsHtml = (b.linkedJobIds||[]).map(id =>
+  const jobsHtml = (b.linkedJobIds || []).map(id =>
     `<a href="#" data-job="${id}" class="lnk">Job ${id.slice(0,6)}</a>`
   ).join(", ") || "-";
 
@@ -539,12 +526,10 @@ function openBatchPopup(b) {
       <button id="close-batch" class="btn gray">Close</button>
     </div>
   `;
+
+  showPopup("Batch Details", body);
 }
-    <hr/>
-    <div class="kv head"><span>Chemicals (rate & totals)</span><span></span></div>
-    ${chems}
-    <hr/>
-    <div class="kv"><span>Linked Jobs</span><span>${jobsHtml}</span></div>
+
     <hr/>
     <div class="grp">
       <button id="edit-batch" class="btn">Edit</button>
