@@ -1,348 +1,350 @@
-/* V55 — core app: nav, create, records, batches, inventory, map, reminders, tracking */
+/* WeedTracker V55 Pilot – apps.js (Part 1 of 2)
+   Core functionality: navigation, task creation, records, batches, inventory, map, reminders */
 
-const qs=s=>document.querySelector(s), qsa=s=>[...document.querySelectorAll(s)];
-function showPage(id){ qsa(".page").forEach(p=>p.classList.remove("active")); qs("#"+id).classList.add("active");
-  if(id==="records") renderRecords(); if(id==="inventory") renderChemInventory();
-  if(id==="batches") renderBatches(); if(id==="procurement") renderProcurement();
-  if(id==="map"){ ensureMap(); renderMap(); } if(id==="reminders") renderReminders();
+(function(){
+'use strict';
+/* ------------------- GLOBAL STATE ------------------- */
+let jobs = JSON.parse(localStorage.getItem('jobs')||'[]');
+let batches = JSON.parse(localStorage.getItem('batches')||'[]');
+let chemicals = JSON.parse(localStorage.getItem('chemicals')||'[]');
+let reminders = JSON.parse(localStorage.getItem('reminders')||'[]');
+
+/* ------------------- SAVE WRAPPERS ------------------- */
+function saveAll(){
+  localStorage.setItem('jobs', JSON.stringify(jobs));
+  localStorage.setItem('batches', JSON.stringify(batches));
+  localStorage.setItem('chemicals', JSON.stringify(chemicals));
+  localStorage.setItem('reminders', JSON.stringify(reminders));
 }
 
-/* ---------- Boot & Nav ---------- */
-document.addEventListener("DOMContentLoaded",()=>{
-  setTimeout(()=>qs("#splash-screen").style.display="none",2400);
-
-  qs("#btnCreateTask").onclick = ()=>showPage("createTask");
-  qs("#btnRecords").onclick    = ()=>showPage("records");
-  qs("#btnInventory").onclick  = ()=>showPage("inventory");
-  qs("#btnBatches").onclick    = ()=>showPage("batches");
-  qs("#btnProcurement").onclick= ()=>showPage("procurement");
-  qs("#btnMapping").onclick    = ()=>showPage("map");
-  qs("#btnReminders").onclick  = ()=>showPage("reminders");
-  qs("#btnSettings").onclick   = ()=>showPage("settings");
-
-  // Create Task
-  qs("#btnLocate").onclick     = onLocate;
-  qs("#btnAutoName").onclick   = autoName;
-  qs("#btnWeather").onclick    = onWeather;
-  qs("#btnNewBatch").onclick   = openCreateBatch;
-  qs("#btnSaveJob").onclick    = ()=>saveJob(false);
-  qs("#btnSaveDraft").onclick  = ()=>saveJob(true);
-
-  // Records
-  qs("#btnRecordsFilter").onclick = renderRecords;
-
-  // Batches
-  qs("#btnBatchFilter").onclick = renderBatches;
-  qs("#btnCreateBatch").onclick = openCreateBatch;
-
-  // Map
-  qs("#btnMapFilter").onclick = renderMap;
-  qs("#btnLocateMe").onclick  = locateUser;
-
-  // Settings
-  qs("#btnClearData").onclick = ()=>clearAllData(true);
-  qs("#btnExportJSON").onclick= exportJSON;
-  qs("#btnExportCSV").onclick = exportCSV;
-
-  // Populate selects
-  refreshWeeds(); refreshBatchSelect();
-});
-
-/* ---------- Helpers ---------- */
-function onLocate(){
-  getGPS(c=>{
-    qs("#gpsPreview").textContent=`GPS: ${c.lat}, ${c.lng}`;
-    qs("#gpsPreview").dataset.lat=c.lat; qs("#gpsPreview").dataset.lng=c.lng;
-    // If no location name, try to use coordinates as fallback label
-    const loc=qs("#locationInput").value.trim();
-    if(!loc) qs("#locationInput").value = `${c.lat}, ${c.lng}`;
+/* ------------------- NAVIGATION ------------------- */
+document.querySelectorAll('[data-view]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('section').forEach(s=>s.classList.add('hidden'));
+    document.getElementById(btn.getAttribute('data-view')).classList.remove('hidden');
   });
-}
-async function onWeather(){
-  const lat=+qs("#gpsPreview").dataset.lat||-34.75;
-  const lng=+qs("#gpsPreview").dataset.lng||148.65;
-  const w=await fetchWeather(lat,lng);
-  qs("#wTemp").textContent = `${w.temp}°C`;
-  qs("#wWind").textContent = `${w.wind} km/h`;
-  qs("#wDir").textContent  = `${toCompass(+w.dir)} (${w.dir}°)`;
-  qs("#wHum").textContent  = `${w.hum}%`;
-  qs("#wTemp").dataset.w = JSON.stringify(w);
-}
-function jobLetter(type){ return type==="Inspection"?"I":type==="SpotSpray"?"S":"R"; }
-function autoName(){
-  const type=qs("#jobType").value;
-  const letter=jobLetter(type);
-  const d=qs("#jobDate").value || new Date().toISOString().slice(0,10);
-  const yyyymmdd=d.replaceAll("-","");
-  let road = (qs("#locationInput").value||"Location").replace(/\s+/g,"");
-  road = road.replace(/[^A-Za-z0-9]/g,""); // alnum only
-  const name = `${letter}${yyyymmdd}_${road||"Site"}`;
-  qs("#jobNamePreview").textContent=`Name: ${name}`;
-  qs("#jobNamePreview").dataset.name=name;
-}
-function refreshWeeds(){
-  const weeds=load(STORAGE_KEYS.weeds), sel=qs("#weedSelect");
-  sel.innerHTML=""; weeds.forEach(w=>{const o=document.createElement("option");o.value=w.name;o.textContent=w.name;sel.appendChild(o);});
-}
-function refreshBatchSelect(){
-  const list=load(STORAGE_KEYS.batches), sel=qs("#batchSelect");
-  sel.innerHTML="<option value=''>— None —</option>";
-  list.forEach(b=>{const o=document.createElement("option");o.value=b.id;o.textContent=`${b.id} • ${b.totalMade}L • Rem ${b.remaining}L`; sel.appendChild(o);});
-}
-
-/* ---------- Save Job ---------- */
-function saveJob(isDraft){
-  const type=qs("#jobType").value;
-  const name=qs("#jobNamePreview").dataset.name || "Untitled";
-  const weed=qs("#weedSelect").value||"";
-  const batchId=qs("#batchSelect").value||"";
-  const notes=qs("#jobNotes").value||"";
-  const date=qs("#jobDate").value || new Date().toISOString().slice(0,10);
-  const start=qs("#startTime").value||"";
-  const stop =qs("#stopTime").value||"";
-  const lat=+(qs("#gpsPreview").dataset.lat||0);
-  const lng=+(qs("#gpsPreview").dataset.lng||0);
-  const w=JSON.parse(qs("#wTemp").dataset.w||"{}");
-  const status=[...document.querySelectorAll("input[name='status']")].find(r=>r.checked)?.value || "Incomplete";
-  const linkId=qs("#linkJobId").value.trim();
-
-  const job={ id:genID("JOB"), name, type, weed, batchId, notes, date, start, stop, lat, lng, weather:w, status, linkedJobs:[] };
-
-  const jobs=load(STORAGE_KEYS.jobs); jobs.push(job); save(STORAGE_KEYS.jobs,jobs);
-
-  // Link if provided
-  if(linkId){
-    const all=load(STORAGE_KEYS.jobs);
-    const other=all.find(j=>j.id===linkId);
-    if(other){ other.linkedJobs=other.linkedJobs||[]; other.linkedJobs.push(job.id); job.linkedJobs.push(other.id); save(STORAGE_KEYS.jobs,all); }
-  }
-
-  // Reminder
-  const weeks=+qs("#reminderWeeks").value||0;
-  if(weeks>0){ const due=new Date(date||new Date()); due.setDate(due.getDate()+7*weeks);
-    addReminder({id:genID("REM"),task:name,date:due.toISOString(),alerted:false}); }
-
-  alert(isDraft?"Draft saved.":"Job saved.");
-  showPage("records");
-}
-
-/* ---------- Roadside tracking ---------- */
-let tracking=false, trackStart=null, trackData=[];
-qs("#jobType").addEventListener("change",()=>{
-  qs("#roadTracking").style.display = qs("#jobType").value==="Roadside" ? "flex":"none";
 });
-qs("#btnStartTrack").addEventListener("click",()=>{
-  tracking=true; trackData=[]; trackStart=Date.now();
-  qs("#btnStartTrack").disabled=true; qs("#btnStopTrack").disabled=false;
-  getGPS(c=>{trackData.push({t:Date.now(),...c}); qs("#trackInfo").textContent=`Started at ${c.lat}, ${c.lng}`;});
-});
-qs("#btnStopTrack").addEventListener("click",()=>{
-  if(!tracking) return;
-  getGPS(c=>{ trackData.push({t:Date.now(),...c});
-    const elap=((Date.now()-trackStart)/60000).toFixed(1);
-    qs("#trackInfo").textContent=`Stopped. Points: ${trackData.length} • ${elap} min`;
-    tracking=false; qs("#btnStartTrack").disabled=false; qs("#btnStopTrack").disabled=true;
-    const tracks=load(STORAGE_KEYS.tracks); tracks.push({id:genID("TRK"), points:trackData}); save(STORAGE_KEYS.tracks,tracks);
+document.querySelectorAll('[data-home]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('section').forEach(s=>s.classList.add('hidden'));
+    document.getElementById('view-home').classList.remove('hidden');
   });
 });
 
-/* ---------- Records ---------- */
-function renderRecords(){
-  const q=(qs("#recordsSearch").value||"").toLowerCase();
-  const type=qs("#recordsType").value, status=qs("#recordsStatus").value;
-  const from=qs("#recordsFrom").value, to=qs("#recordsTo").value;
-
-  let jobs=load(STORAGE_KEYS.jobs);
-  if(q) jobs=jobs.filter(j=>[j.name,j.weed].join(" ").toLowerCase().includes(q));
-  if(type!=="All") jobs=jobs.filter(j=>j.type===type);
-  if(status!=="All") jobs=jobs.filter(j=>j.status===status);
-  if(from) jobs=jobs.filter(j=>j.date>=from);
-  if(to) jobs=jobs.filter(j=>j.date<=to);
-
-  const list=qs("#recordsList"); list.innerHTML="";
-  if(!jobs.length){ list.innerHTML=`<div class="muted">No records.</div>`; return; }
-
-  jobs.forEach(j=>{
-    const line=document.createElement("div"); line.className="record-line";
-    line.innerHTML=`<div>${j.name} ${j.status!=="Draft" ? `<span class="tag ${j.status==='Complete'?'complete':'incomplete'}">${j.status}</span>`:`<span class="tag draft">Draft</span>`}</div>
-                    <button class="open-mini" onclick="openJob('${j.id}')">Open 🔍</button>`;
-    list.appendChild(line);
-  });
-}
-function openJob(id){
-  const j=load(STORAGE_KEYS.jobs).find(x=>x.id===id); if(!j) return;
-  const m=qs("#modal");
-  const links=(j.linkedJobs||[]).map(x=>`<button class="open-mini" onclick="openJob('${x}')">${x}</button>`).join(" ");
-  m.innerHTML=`
-    <h3>${j.name}</h3>
-    <div class="modal-row">
-      <div><b>Type:</b> ${j.type}</div><div><b>Status:</b> ${j.status}</div><div><b>Date:</b> ${j.date}</div>
-    </div>
-    <div class="modal-row">
-      <div><b>Start:</b> ${j.start||"—"}</div><div><b>Finish:</b> ${j.stop||"—"}</div>
-      <div><b>GPS:</b> ${j.lat||"—"}, ${j.lng||"—"}</div>
-    </div>
-    <div class="modal-row">
-      <div><b>Weed:</b> ${j.weed||"—"}</div><div><b>Batch:</b> ${j.batchId||"—"}</div>
-      <div><b>Weather:</b> ${j.weather? `${j.weather.temp}°C, ${j.weather.wind} km/h, ${toCompass(+j.weather.dir)} (${j.weather.dir}°), ${j.weather.hum}%`:"—"}</div>
-    </div>
-    <div class="modal-row"><div><b>Notes:</b> ${j.notes||"—"}</div></div>
-    ${links?`<div class="modal-row"><b>Linked Jobs:</b> ${links}</div>`:""}
-    <div class="modal-actions">
-      <button class="action" onclick="markComplete('${j.id}')">Mark Complete</button>
-      <button class="action" onclick="editJob('${j.id}')">Edit</button>
-      <button class="action ghost" onclick="closeModal()">Close</button>
-    </div>`;
-  m.classList.add("active");
-}
-function closeModal(){ qs("#modal").classList.remove("active"); }
-function markComplete(id){
-  const jobs=load(STORAGE_KEYS.jobs); const i=jobs.findIndex(j=>j.id===id); if(i<0) return;
-  jobs[i].status="Complete"; save(STORAGE_KEYS.jobs,jobs); closeModal(); renderRecords();
-}
-function editJob(id){
-  const j=load(STORAGE_KEYS.jobs).find(x=>x.id===id); if(!j) return;
-  showPage("createTask");
-  qs("#jobType").value=j.type; qs("#locationInput").value=j.name.split("_")[1]?.replace(/([A-Z])/g,' $1').trim()||"";
-  qs("#weedSelect").value=j.weed||""; qs("#batchSelect").value=j.batchId||"";
-  qs("#jobNotes").value=j.notes||""; qs("#jobDate").value=j.date||""; qs("#startTime").value=j.start||""; qs("#stopTime").value=j.stop||"";
-  qs("#gpsPreview").textContent=`GPS: ${j.lat||"—"}, ${j.lng||"—"}`; qs("#gpsPreview").dataset.lat=j.lat||""; qs("#gpsPreview").dataset.lng=j.lng||"";
-  qs("#wTemp").dataset.w=JSON.stringify(j.weather||{}); qs("#wTemp").textContent=`${j?.weather?.temp??"—"}°C`;
-  qs("#wWind").textContent=`${j?.weather?.wind??"—"} km/h`;
-  qs("#wDir").textContent = j?.weather?.dir?`${toCompass(+j.weather.dir)} (${j.weather.dir}°)`:"—";
-  qs("#wHum").textContent = `${j?.weather?.hum??"—"}%`;
-  (document.querySelectorAll("input[name='status']")).forEach(r=>r.checked=r.value===j.status);
-
-  const originalSave=qs("#btnSaveJob").onclick;
-  qs("#btnSaveJob").onclick=()=>{
-    const all=load(STORAGE_KEYS.jobs); const k=all.findIndex(x=>x.id===id); if(k<0) return;
-    const status=[...document.querySelectorAll("input[name='status']")].find(r=>r.checked)?.value || "Incomplete";
-    all[k]={...all[k],
-      type:qs("#jobType").value, name:(qs("#jobNamePreview").dataset.name||all[k].name),
-      weed:qs("#weedSelect").value, batchId:qs("#batchSelect").value, notes:qs("#jobNotes").value,
-      date:qs("#jobDate").value||all[k].date, start:qs("#startTime").value, stop:qs("#stopTime").value,
-      lat:+(qs("#gpsPreview").dataset.lat||0), lng:+(qs("#gpsPreview").dataset.lng||0),
-      weather:JSON.parse(qs("#wTemp").dataset.w||"{}"), status
+/* ------------------- CREATE TASK ------------------- */
+const f = document.getElementById('taskForm');
+if(f){
+  f.addEventListener('submit',e=>{
+    e.preventDefault();
+    const job = {
+      id: Date.now(),
+      type: f.jobType.value,
+      location: f.jobLocation.value,
+      name: f.jobName.value,
+      council: f.councilNumber.value,
+      date: f.jobDate.value,
+      wx: {
+        temp: f.wxTemp.value,
+        wind: f.wxWind.value,
+        dir: f.wxDir.value,
+        dirDeg: f.wxDirDeg.value,
+        hum: f.wxHum.value
+      },
+      weed: f.weedSelect.value,
+      batch: f.batchSelect.value,
+      notes: f.jobNotes.value,
+      status: f.jobStatus.value,
+      reminder: f.reminderWeeks.value,
+      timeStart: new Date().toLocaleTimeString(),
+      timeStop: '',
+      linkedJobs: []
     };
-    save(STORAGE_KEYS.jobs,all); alert("Job updated."); showPage("records");
-    qs("#btnSaveJob").onclick=originalSave;
-  };
-  closeModal();
-}
-
-/* ---------- Batches ---------- */
-function openCreateBatch(){
-  const m=qs("#modal");
-  const opts=load(STORAGE_KEYS.chems).map(c=>`<option value="${c.name}">${c.name}</option>`).join("");
-  const chemRows=Array.from({length:10}).map((_,i)=>`
-    <div class="row-compact">
-      <select class="batchChem" data-i="${i}"><option value="">— Chemical —</option>${opts}</select>
-      <input class="ratePer100" data-i="${i}" type="number" step="0.01" placeholder="Rate /100L"/>
-      <input class="totalAdded" data-i="${i}" type="number" step="0.01" placeholder="Total added (L/kg)"/>
-    </div>`).join("");
-  m.innerHTML=`
-    <h3>Create Batch</h3>
-    <div class="row-compact"><input id="batchTotal" type="number" step="1" placeholder="Total made (L)"/></div>
-    ${chemRows}
-    <div class="modal-actions">
-      <button class="action" onclick="saveBatch()">Save Batch</button>
-      <button class="action ghost" onclick="closeModal()">Close</button>
-    </div>`;
-  m.classList.add("active");
-}
-function saveBatch(){
-  const totalMade=+qs("#batchTotal").value||0;
-  const chems=[]; qsa(".batchChem").forEach((sel,i)=>{
-    const name=sel.value; const rate=+qs(`.ratePer100[data-i='${i}']`).value||0; const total=+qs(`.totalAdded[data-i='${i}']`).value||0;
-    if(name) chems.push({name,ratePer100:rate,totalAdded:total});
+    jobs.push(job);
+    if(+job.reminder>0){
+      const due = new Date();
+      due.setDate(due.getDate() + (+job.reminder*7));
+      reminders.push({id: job.id, job: job.name, due: due.toISOString().split('T')[0]});
+    }
+    saveAll();
+    toastInline('✅ Job saved');
+    f.reset();
   });
-  const batch={id:genID("BATCH"),totalMade,remaining:totalMade,chems,date:new Date().toISOString().slice(0,10)};
-  const list=load(STORAGE_KEYS.batches); list.push(batch); save(STORAGE_KEYS.batches,list);
-
-  // Deduct inventory
-  const inv=load(STORAGE_KEYS.chems);
-  chems.forEach(c=>{ const i=inv.findIndex(x=>x.name===c.name); if(i>-1) inv[i].quantity=Math.max(0,(inv[i].quantity||0)-(c.totalAdded||0)); });
-  save(STORAGE_KEYS.chems,inv);
-
-  alert("Batch saved."); closeModal(); refreshBatchSelect(); renderBatches();
 }
+
+/* locate me button */
+const btnLocate = document.getElementById('btnLocate');
+if(btnLocate) btnLocate.addEventListener('click', locateMe);
+
+/* weather auto */
+autoWeather();
+
+/* tracking */
+const btnStartTracking = document.getElementById('btnStartTracking');
+const btnStopTracking = document.getElementById('btnStopTracking');
+let trackingJob = null;
+if(btnStartTracking){
+  btnStartTracking.addEventListener('click',()=>{
+    trackingJob = new Date().toLocaleTimeString();
+    toastInline('▶️ Tracking started');
+  });
+}
+if(btnStopTracking){
+  btnStopTracking.addEventListener('click',()=>{
+    if(!trackingJob) return toastInline('⚠️ No tracking started','warn');
+    const t = new Date().toLocaleTimeString();
+    toastInline(`⏹ Tracking stopped (${trackingJob} - ${t})`);
+    trackingJob = null;
+  });
+}
+
+/* ------------------- RECORDS ------------------- */
+function renderRecords(filter=''){
+  const list = document.getElementById('recordList');
+  if(!list) return;
+  list.innerHTML='';
+  const start = document.getElementById('searchStart')?.value;
+  const end = document.getElementById('searchEnd')?.value;
+  let results = jobs;
+  if(filter) results = results.filter(j=>Object.values(j).join(' ').toLowerCase().includes(filter.toLowerCase()));
+  if(start) results = results.filter(j=>j.date>=start);
+  if(end) results = results.filter(j=>j.date<=end);
+  if(results.length===0){ list.innerHTML='<p>No records found.</p>'; return; }
+  results.forEach(j=>{
+    const div=document.createElement('div');
+    div.className='record-card';
+    div.innerHTML=`
+      <div class="record-head">${j.name}<span class="badge ${j.status==='Complete'?'green':'amber'}">${j.status}</span></div>
+      <div class="record-sub"><span>${j.type}</span><span>${j.date}</span></div>
+      <div class="record-actions"><button class="btn" data-open="${j.id}">Open</button></div>`;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-open]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const j=jobs.find(x=>x.id==b.dataset.open);
+      showModal(j.name,`
+        <p><b>Type:</b> ${j.type}</p>
+        <p><b>Location:</b> ${j.location}</p>
+        <p><b>Date:</b> ${j.date}</p>
+        <p><b>Weather:</b> ${j.wx.temp}°C, ${j.wx.wind}km/h, ${j.wx.dir} ${j.wx.dirDeg}°, ${j.wx.hum}%</p>
+        <p><b>Weed:</b> ${j.weed}</p>
+        <p><b>Batch:</b> ${j.batch}</p>
+        <p><b>Notes:</b> ${j.notes}</p>
+        <p><b>Status:</b> ${j.status}</p>
+        <p><b>Reminder:</b> ${j.reminder} weeks</p>
+      `);
+    });
+  });
+}
+const btnSearch=document.getElementById('btnSearch');
+if(btnSearch) btnSearch.addEventListener('click',()=>renderRecords(document.getElementById('searchText').value));
+renderRecords();
+
+/* ------------------- BATCHES ------------------- */
 function renderBatches(){
-  const q=(qs("#batchSearch").value||"").toLowerCase();
-  const from=qs("#batchFrom").value, to=qs("#batchTo").value;
-  let list=load(STORAGE_KEYS.batches);
-  if(q) list=list.filter(b=>b.id.toLowerCase().includes(q));
-  if(from) list=list.filter(b=>b.date>=from);
-  if(to) list=list.filter(b=>b.date<=to);
-
-  const wrap=qs("#batchList"); wrap.innerHTML="";
-  if(!list.length){ wrap.innerHTML=`<div class="muted">No batches.</div>`; return; }
-  list.forEach(b=>{
-    const line=document.createElement("div"); line.className="batch-line";
-    line.innerHTML=`<div>${b.id}</div><button class="open-mini" onclick="openBatch('${b.id}')">Open 🔍</button>`;
-    wrap.appendChild(line);
+  const list=document.getElementById('batchList');
+  if(!list) return;
+  list.innerHTML='';
+  if(batches.length===0){list.innerHTML='<p>No batches found.</p>';return;}
+  batches.forEach(b=>{
+    const usedPerc=b.remaining<=0?0:Math.round((b.remaining/b.total)*100);
+    const ring=b.remaining<=0?'ring-red':usedPerc<30?'ring-amber':'ring-green';
+    const div=document.createElement('div');
+    div.className=`batch-card ${ring}`;
+    div.innerHTML=`
+      <div class="record-head">${b.id}<span>${b.date}</span></div>
+      <div class="record-sub"><span>Total mix:</span><span>${b.total}L</span></div>
+      <div class="record-sub"><span>Remaining:</span><span>${b.remaining}L</span></div>
+      <div class="record-actions"><button class="btn" data-batch="${b.id}">Open</button></div>`;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-batch]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const bt=batches.find(x=>x.id==b.dataset.batch);
+      const chems=bt.chems.map(c=>`<li>${c.name}: ${c.rate}/100L (Total ${c.total})</li>`).join('');
+      showModal(bt.id,`
+        <p><b>Date:</b> ${bt.date}</p>
+        <p><b>Total mix:</b> ${bt.total}L</p>
+        <p><b>Remaining:</b> ${bt.remaining}L</p>
+        <p><b>Chemicals:</b></p><ul>${chems}</ul>
+        <p><b>Jobs linked:</b> ${(bt.jobs||[]).map(j=>`<span>${j}</span>`).join(', ')}</p>
+      `);
+    });
   });
 }
-function openBatch(id){
-  const b=load(STORAGE_KEYS.batches).find(x=>x.id===id); if(!b) return;
-  const chems=b.chems.map(c=>`• ${c.name} — ${c.ratePer100}/100L — total ${c.totalAdded}`).join("<br>");
-  const m=qs("#modal");
-  m.innerHTML=`
-    <h3>${b.id}</h3>
-    <div class="modal-row"><div><b>Date:</b> ${b.date}</div><div><b>Total:</b> ${b.totalMade} L</div><div><b>Remaining:</b> ${b.remaining} L</div></div>
-    <div class="modal-row"><div><b>Chemicals:</b><br>${chems||"<i>None</i>"}</div></div>
-    <div class="modal-actions"><button class="action ghost" onclick="closeModal()">Close</button></div>`;
-  m.classList.add("active");
-}
+renderBatches();
 
-/* ---------- Inventory / Procurement ---------- */
-function renderChemInventory(){
-  const q=(qs("#chemSearch").value||"").toLowerCase();
-  const list=load(STORAGE_KEYS.chems).filter(c=>!q || c.name.toLowerCase().includes(q));
-  const wrap=qs("#chemList"); wrap.innerHTML="";
-  list.forEach(c=>{
-    const low=c.quantity<=c.low;
-    const row=document.createElement("div");
-    row.className="record-line";
-    row.innerHTML=`<div><b>${c.name}</b> <span class="muted small">${c.active}</span></div>
-                   <div>${c.quantity} ${c.unit} ${low?'<span class="tag draft">Low</span>':''}</div>`;
-    wrap.appendChild(row);
+/* create batch */
+const btnAddBatch=document.getElementById('btnAddBatch');
+if(btnAddBatch){
+  btnAddBatch.addEventListener('click',()=>{
+    const id=`B${Date.now()}`;
+    const date=todayStr();
+    const total=prompt('Total mix (L):')||'0';
+    const remaining=total;
+    const chems=[];
+    let addMore=true;
+    while(addMore){
+      const name=prompt('Chemical name (leave blank to stop)');
+      if(!name) break;
+      const rate=prompt(`Rate of ${name} per 100L:`)||'0';
+      const totalChem=+total*+rate/100;
+      chems.push({name,rate,total:totalChem});
+    }
+    batches.push({id,date,total,remaining,chems,jobs:[]});
+    saveAll(); renderBatches(); toastInline('🧪 Batch added');
   });
 }
+/* WeedTracker V55 Pilot – apps.js (Part 2 of 2)
+   Sections: Inventory, Procurement, Mapping, Settings & Reminders */
+
+(function(){
+'use strict';
+
+/* ------------------- CHEMICAL INVENTORY ------------------- */
+function renderInventory(){
+  const list=document.getElementById('inventoryList');
+  if(!list) return;
+  list.innerHTML='';
+  if(chemicals.length===0){list.innerHTML='<p>No chemicals in inventory.</p>';return;}
+  chemicals.forEach((c,i)=>{
+    const div=document.createElement('div');
+    div.className='chem-card';
+    div.innerHTML=`
+      <div class="chem-head">${c.name} <span>${c.amount}${c.unit}</span></div>
+      <div class="chem-actions">
+        <button class="btn" data-edit="${i}">Edit</button>
+      </div>`;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-edit]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const c=chemicals[b.dataset.edit];
+      const newAmt=prompt(`Adjust amount for ${c.name}:`,c.amount);
+      if(newAmt===null) return;
+      c.amount=+newAmt;
+      if(c.amount<=c.low){
+        toastInline(`${c.name} low in stock – added to Procurement List`);
+        addToProc(c.name);
+      }
+      saveAll(); renderInventory();
+    });
+  });
+}
+function addToProc(name){
+  const p=document.getElementById('procList');
+  const existing=procurements.find(p=>p.name===name);
+  if(existing) return;
+  procurements.push({id:Date.now(),name,status:'Pending'});
+  localStorage.setItem('procurements',JSON.stringify(procurements));
+  renderProcurement();
+}
+
+/* Add Chemical */
+const btnAddChem=document.getElementById('btnAddChemical');
+if(btnAddChem){
+  btnAddChem.addEventListener('click',()=>{
+    const name=prompt('Chemical name:'); if(!name)return;
+    const unit=prompt('Unit (L/kg/ml):','L');
+    const amount=+(prompt('Current amount:','0'));
+    const low=+(prompt('Low stock threshold:','5'));
+    const active=prompt('Active ingredient:','');
+    chemicals.push({name,unit,amount,low,active});
+    saveAll(); renderInventory(); toastInline('💧 Chemical added');
+  });
+}
+renderInventory();
+
+/* ------------------- PROCUREMENT LIST ------------------- */
+let procurements=JSON.parse(localStorage.getItem('procurements')||'[]');
 function renderProcurement(){
-  const list=load(STORAGE_KEYS.chems).filter(c=>c.quantity<=c.low);
-  const wrap=qs("#procureList"); wrap.innerHTML="";
-  if(!list.length){ wrap.innerHTML=`<div class="muted">No items need re-ordering.</div>`; return; }
-  list.forEach(c=>{
-    const row=document.createElement("div");
-    row.className="record-line";
-    row.innerHTML=`<div><b>${c.name}</b></div><div>Reorder • Min ${c.low}${c.unit} • Have ${c.quantity}${c.unit}</div>`;
-    wrap.appendChild(row);
+  const list=document.getElementById('procList');
+  if(!list) return;
+  list.innerHTML='';
+  if(procurements.length===0){list.innerHTML='<p>No procurement items.</p>';return;}
+  procurements.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='proc-card';
+    div.innerHTML=`
+      <div>${p.name}</div>
+      <div>
+        <button class="btn" data-action="done" data-i="${i}">Done</button>
+        <button class="btn" data-action="snooze" data-i="${i}">Snooze</button>
+      </div>`;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-action]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const i=btn.dataset.i;
+      if(btn.dataset.action==='done'){
+        procurements.splice(i,1);
+        toastInline('✅ Procurement completed');
+      }else{
+        toastInline('⏰ Snoozed for 1 week');
+      }
+      localStorage.setItem('procurements',JSON.stringify(procurements));
+      renderProcurement();
+    });
+  });
+}
+renderProcurement();
+
+/* ------------------- MAPPING (Via Leaflet) ------------------- */
+let map;
+function initMap(){
+  map=L.map('map').setView([-34.55,148.72],10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  jobs.forEach(j=>{
+    const latlng=[j.lat||-34.55+(Math.random()/10),j.lng||148.72+(Math.random()/10)];
+    const color=j.type==='Road Spray'?'yellow':j.type==='Inspection'?'blue':'green';
+    const marker=L.circleMarker(latlng,{radius:6,color}).addTo(map);
+    marker.bindPopup(`<b>${j.name}</b><br>${j.type}<br>${j.date}`);
+  });
+}
+const mapBtn=document.getElementById('btnLocateMap');
+if(mapBtn){
+  mapBtn.addEventListener('click',()=>{
+    navigator.geolocation.getCurrentPosition(p=>{
+      map.setView([p.coords.latitude,p.coords.longitude],15);
+      L.marker([p.coords.latitude,p.coords.longitude]).addTo(map)
+        .bindPopup('📍 You are here').openPopup();
+    });
+  });
+}
+setTimeout(()=>{ if(document.getElementById('map')) initMap(); },500);
+
+/* ------------------- SETTINGS ------------------- */
+const btnClearAll=document.getElementById('btnClearAll');
+if(btnClearAll){
+  btnClearAll.addEventListener('click',()=>{
+    if(confirm('Delete all data?')){
+      localStorage.clear();
+      toastInline('🗑️ All data cleared');
+      location.reload();
+    }
+  });
+}
+const btnExport=document.getElementById('btnExport');
+if(btnExport){
+  btnExport.addEventListener('click',()=>{
+    const data={jobs,batches,chemicals,reminders,procurements};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='WeedTrackerData.json';
+    a.click();
+    toastInline('📤 Data exported');
   });
 }
 
-/* ---------- Map ---------- */
-function renderMap(){
-  const type=qs("#mapType").value, stat=qs("#mapStatus").value;
-  const from=qs("#mapFrom").value, to=qs("#mapTo").value;
-  let jobs=load(STORAGE_KEYS.jobs);
-  if(type!=="All") jobs=jobs.filter(j=>j.type===type);
-  if(stat==="Open") jobs=jobs.filter(j=>j.status!=="Complete");
-  if(stat==="Closed") jobs=jobs.filter(j=>j.status==="Complete");
-  if(from) jobs=jobs.filter(j=>j.date>=from);
-  if(to) jobs=jobs.filter(j=>j.date<=to);
-  plotJobs(jobs);
-}
-
-/* ---------- Reminders ---------- */
-function renderReminders(){
-  const wrap=qs("#reminderList"); wrap.innerHTML="";
-  const list=load(STORAGE_KEYS.reminders);
-  if(!list.length){ wrap.innerHTML=`<div class="muted">No reminders set.</div>`; return; }
-  list.forEach(r=>{
-    const row=document.createElement("div"); row.className="record-line";
-    row.innerHTML=`<div><b>${r.task}</b><div class="small muted">Due: ${new Date(r.date).toLocaleString()}</div></div>
-                   <button class="open-mini" onclick="dismissReminder('${r.id}')">Dismiss</button>`;
-    wrap.appendChild(row);
+/* ------------------- REMINDERS ------------------- */
+function checkReminders(){
+  const today=todayStr();
+  reminders.filter(r=>r.due===today).forEach(r=>{
+    toastInline(`🔔 Reminder due: ${r.job}`,'warn');
   });
 }
-function dismissReminder(id){ deleteReminder(id); renderReminders(); }
+setInterval(checkReminders,60000);
+checkReminders();
+
+})();
