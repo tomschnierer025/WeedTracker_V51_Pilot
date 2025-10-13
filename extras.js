@@ -1,97 +1,350 @@
-/* V55 — GPS, weather, notifications, map, exports */
+/* WeedTracker V55 Pilot – apps.js (Part 1 of 2)
+   Core functionality: navigation, task creation, records, batches, inventory, map, reminders */
 
-function toCompass(deg){
-  if(deg==null||deg==='—')return '—';
-  const dirs=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
-  return dirs[Math.round(deg/22.5)%16];
-}
+(function(){
+'use strict';
+/* ------------------- GLOBAL STATE ------------------- */
+let jobs = JSON.parse(localStorage.getItem('jobs')||'[]');
+let batches = JSON.parse(localStorage.getItem('batches')||'[]');
+let chemicals = JSON.parse(localStorage.getItem('chemicals')||'[]');
+let reminders = JSON.parse(localStorage.getItem('reminders')||'[]');
 
-async function fetchWeather(lat,lng){
-  try{
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat||-34.75}&longitude=${lng||148.65}&current=temperature_2m,wind_speed_10m,wind_direction_10m,relative_humidity_2m`;
-    const r=await fetch(url); const d=await r.json(); const c=d.current||{};
-    return { temp:c.temperature_2m??"—", wind:c.wind_speed_10m??"—", dir:c.wind_direction_10m??"—", hum:c.relative_humidity_2m??"—" };
-  }catch(e){ return {temp:"—",wind:"—",dir:"—",hum:"—"} }
-}
-
-function getGPS(cb){
-  if(!navigator.geolocation){ alert("GPS not supported"); cb({lat:-34.75,lng:148.65}); return; }
-  navigator.geolocation.getCurrentPosition(
-    p=>cb({lat:+p.coords.latitude.toFixed(5),lng:+p.coords.longitude.toFixed(5)}),
-    _=>{alert("Unable to get GPS"); cb({lat:-34.75,lng:148.65});},
-    {enableHighAccuracy:true,timeout:10000}
-  );
+/* ------------------- SAVE WRAPPERS ------------------- */
+function saveAll(){
+  localStorage.setItem('jobs', JSON.stringify(jobs));
+  localStorage.setItem('batches', JSON.stringify(batches));
+  localStorage.setItem('chemicals', JSON.stringify(chemicals));
+  localStorage.setItem('reminders', JSON.stringify(reminders));
 }
 
-/* Notifications / reminders */
-function addReminder(rec){ const all=load(STORAGE_KEYS.reminders); all.push(rec); save(STORAGE_KEYS.reminders,all); }
-function listReminders(){ return load(STORAGE_KEYS.reminders); }
-function deleteReminder(id){ save(STORAGE_KEYS.reminders, listReminders().filter(r=>r.id!==id)); }
-function tickReminders(){
-  const all=listReminders(); const now=Date.now(); let changed=false;
-  all.forEach(r=>{ const due=new Date(r.date).getTime(); if(!r.alerted && due-now<=24*3600*1000){ notify(`Reminder due: ${r.task}`); r.alerted=true; changed=true; }});
-  if(changed) save(STORAGE_KEYS.reminders,all);
-}
-function notify(msg){
-  if("Notification" in window){
-    if(Notification.permission==="granted") new Notification("Weed Tracker", {body:msg});
-    else if(Notification.permission!=="denied") Notification.requestPermission();
-  } else alert(msg);
-}
-
-/* Map (Leaflet) */
-let map,userMarker,markers=[];
-function ensureMap(){
-  if(map) return;
-  map=L.map("mapView").setView([-34.75,148.65],10);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
-}
-function clearMarkers(){ markers.forEach(m=>map.removeLayer(m)); markers=[]; }
-function plotJobs(jobs){
-  ensureMap(); clearMarkers();
-  jobs.forEach(j=>{
-    if(!j.lat||!j.lng) return;
-    const m=L.marker([j.lat,j.lng]).addTo(map);
-    m.bindPopup(`<b>${j.name}</b><br>${j.type} • ${j.date}<br><button onclick="openAppleMaps(${j.lat},${j.lng})">Navigate</button>`);
-    markers.push(m);
+/* ------------------- NAVIGATION ------------------- */
+document.querySelectorAll('[data-view]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('section').forEach(s=>s.classList.add('hidden'));
+    document.getElementById(btn.getAttribute('data-view')).classList.remove('hidden');
   });
-}
-function locateUser(){
-  ensureMap();
-  getGPS(c=>{
-    if(userMarker) map.removeLayer(userMarker);
-    userMarker=L.marker([c.lat,c.lng],{title:"You are here"}).addTo(map);
-    map.setView([c.lat,c.lng],14);
-  });
-}
-function openAppleMaps(lat,lng){ window.open(`https://maps.apple.com/?q=${lat},${lng}`,"_blank"); }
-
-/* Exports */
-function exportJSON(){
-  const data={
-    jobs:load(STORAGE_KEYS.jobs),
-    batches:load(STORAGE_KEYS.batches),
-    chems:load(STORAGE_KEYS.chems),
-    reminders:load(STORAGE_KEYS.reminders),
-    tracks:load(STORAGE_KEYS.tracks)
-  };
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="weedtracker_export.json"; a.click();
-}
-function toCSV(rows){
-  if(!rows.length) return "";
-  const headers=Object.keys(rows[0]);
-  const escape=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-  return [headers.join(","),...rows.map(r=>headers.map(h=>escape(r[h])).join(","))].join("\n");
-}
-function exportCSV(){
-  const jobs=load(STORAGE_KEYS.jobs);
-  const blob=new Blob([toCSV(jobs)],{type:"text/csv"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="weedtracker_jobs.csv"; a.click();
-}
-
-/* Boot */
-document.addEventListener("DOMContentLoaded",()=>{
-  if("Notification" in window && Notification.permission!=="granted") Notification.requestPermission();
-  setInterval(tickReminders,60*1000);
 });
+document.querySelectorAll('[data-home]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('section').forEach(s=>s.classList.add('hidden'));
+    document.getElementById('view-home').classList.remove('hidden');
+  });
+});
+
+/* ------------------- CREATE TASK ------------------- */
+const f = document.getElementById('taskForm');
+if(f){
+  f.addEventListener('submit',e=>{
+    e.preventDefault();
+    const job = {
+      id: Date.now(),
+      type: f.jobType.value,
+      location: f.jobLocation.value,
+      name: f.jobName.value,
+      council: f.councilNumber.value,
+      date: f.jobDate.value,
+      wx: {
+        temp: f.wxTemp.value,
+        wind: f.wxWind.value,
+        dir: f.wxDir.value,
+        dirDeg: f.wxDirDeg.value,
+        hum: f.wxHum.value
+      },
+      weed: f.weedSelect.value,
+      batch: f.batchSelect.value,
+      notes: f.jobNotes.value,
+      status: f.jobStatus.value,
+      reminder: f.reminderWeeks.value,
+      timeStart: new Date().toLocaleTimeString(),
+      timeStop: '',
+      linkedJobs: []
+    };
+    jobs.push(job);
+    if(+job.reminder>0){
+      const due = new Date();
+      due.setDate(due.getDate() + (+job.reminder*7));
+      reminders.push({id: job.id, job: job.name, due: due.toISOString().split('T')[0]});
+    }
+    saveAll();
+    toastInline('✅ Job saved');
+    f.reset();
+  });
+}
+
+/* locate me button */
+const btnLocate = document.getElementById('btnLocate');
+if(btnLocate) btnLocate.addEventListener('click', locateMe);
+
+/* weather auto */
+autoWeather();
+
+/* tracking */
+const btnStartTracking = document.getElementById('btnStartTracking');
+const btnStopTracking = document.getElementById('btnStopTracking');
+let trackingJob = null;
+if(btnStartTracking){
+  btnStartTracking.addEventListener('click',()=>{
+    trackingJob = new Date().toLocaleTimeString();
+    toastInline('▶️ Tracking started');
+  });
+}
+if(btnStopTracking){
+  btnStopTracking.addEventListener('click',()=>{
+    if(!trackingJob) return toastInline('⚠️ No tracking started','warn');
+    const t = new Date().toLocaleTimeString();
+    toastInline(`⏹ Tracking stopped (${trackingJob} - ${t})`);
+    trackingJob = null;
+  });
+}
+
+/* ------------------- RECORDS ------------------- */
+function renderRecords(filter=''){
+  const list = document.getElementById('recordList');
+  if(!list) return;
+  list.innerHTML='';
+  const start = document.getElementById('searchStart')?.value;
+  const end = document.getElementById('searchEnd')?.value;
+  let results = jobs;
+  if(filter) results = results.filter(j=>Object.values(j).join(' ').toLowerCase().includes(filter.toLowerCase()));
+  if(start) results = results.filter(j=>j.date>=start);
+  if(end) results = results.filter(j=>j.date<=end);
+  if(results.length===0){ list.innerHTML='<p>No records found.</p>'; return; }
+  results.forEach(j=>{
+    const div=document.createElement('div');
+    div.className='record-card';
+    div.innerHTML=`
+      <div class="record-head">${j.name}<span class="badge ${j.status==='Complete'?'green':'amber'}">${j.status}</span></div>
+      <div class="record-sub"><span>${j.type}</span><span>${j.date}</span></div>
+      <div class="record-actions"><button class="btn" data-open="${j.id}">Open</button></div>`;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-open]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const j=jobs.find(x=>x.id==b.dataset.open);
+      showModal(j.name,`
+        <p><b>Type:</b> ${j.type}</p>
+        <p><b>Location:</b> ${j.location}</p>
+        <p><b>Date:</b> ${j.date}</p>
+        <p><b>Weather:</b> ${j.wx.temp}°C, ${j.wx.wind}km/h, ${j.wx.dir} ${j.wx.dirDeg}°, ${j.wx.hum}%</p>
+        <p><b>Weed:</b> ${j.weed}</p>
+        <p><b>Batch:</b> ${j.batch}</p>
+        <p><b>Notes:</b> ${j.notes}</p>
+        <p><b>Status:</b> ${j.status}</p>
+        <p><b>Reminder:</b> ${j.reminder} weeks</p>
+      `);
+    });
+  });
+}
+const btnSearch=document.getElementById('btnSearch');
+if(btnSearch) btnSearch.addEventListener('click',()=>renderRecords(document.getElementById('searchText').value));
+renderRecords();
+
+/* ------------------- BATCHES ------------------- */
+function renderBatches(){
+  const list=document.getElementById('batchList');
+  if(!list) return;
+  list.innerHTML='';
+  if(batches.length===0){list.innerHTML='<p>No batches found.</p>';return;}
+  batches.forEach(b=>{
+    const usedPerc=b.remaining<=0?0:Math.round((b.remaining/b.total)*100);
+    const ring=b.remaining<=0?'ring-red':usedPerc<30?'ring-amber':'ring-green';
+    const div=document.createElement('div');
+    div.className=`batch-card ${ring}`;
+    div.innerHTML=`
+      <div class="record-head">${b.id}<span>${b.date}</span></div>
+      <div class="record-sub"><span>Total mix:</span><span>${b.total}L</span></div>
+      <div class="record-sub"><span>Remaining:</span><span>${b.remaining}L</span></div>
+      <div class="record-actions"><button class="btn" data-batch="${b.id}">Open</button></div>`;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-batch]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const bt=batches.find(x=>x.id==b.dataset.batch);
+      const chems=bt.chems.map(c=>`<li>${c.name}: ${c.rate}/100L (Total ${c.total})</li>`).join('');
+      showModal(bt.id,`
+        <p><b>Date:</b> ${bt.date}</p>
+        <p><b>Total mix:</b> ${bt.total}L</p>
+        <p><b>Remaining:</b> ${bt.remaining}L</p>
+        <p><b>Chemicals:</b></p><ul>${chems}</ul>
+        <p><b>Jobs linked:</b> ${(bt.jobs||[]).map(j=>`<span>${j}</span>`).join(', ')}</p>
+      `);
+    });
+  });
+}
+renderBatches();
+
+/* create batch */
+const btnAddBatch=document.getElementById('btnAddBatch');
+if(btnAddBatch){
+  btnAddBatch.addEventListener('click',()=>{
+    const id=`B${Date.now()}`;
+    const date=todayStr();
+    const total=prompt('Total mix (L):')||'0';
+    const remaining=total;
+    const chems=[];
+    let addMore=true;
+    while(addMore){
+      const name=prompt('Chemical name (leave blank to stop)');
+      if(!name) break;
+      const rate=prompt(`Rate of ${name} per 100L:`)||'0';
+      const totalChem=+total*+rate/100;
+      chems.push({name,rate,total:totalChem});
+    }
+    batches.push({id,date,total,remaining,chems,jobs:[]});
+    saveAll(); renderBatches(); toastInline('🧪 Batch added');
+  });
+}
+/* WeedTracker V55 Pilot – apps.js (Part 2 of 2)
+   Sections: Inventory, Procurement, Mapping, Settings & Reminders */
+
+(function(){
+'use strict';
+
+/* ------------------- CHEMICAL INVENTORY ------------------- */
+function renderInventory(){
+  const list=document.getElementById('inventoryList');
+  if(!list) return;
+  list.innerHTML='';
+  if(chemicals.length===0){list.innerHTML='<p>No chemicals in inventory.</p>';return;}
+  chemicals.forEach((c,i)=>{
+    const div=document.createElement('div');
+    div.className='chem-card';
+    div.innerHTML=`
+      <div class="chem-head">${c.name} <span>${c.amount}${c.unit}</span></div>
+      <div class="chem-actions">
+        <button class="btn" data-edit="${i}">Edit</button>
+      </div>`;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-edit]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const c=chemicals[b.dataset.edit];
+      const newAmt=prompt(`Adjust amount for ${c.name}:`,c.amount);
+      if(newAmt===null) return;
+      c.amount=+newAmt;
+      if(c.amount<=c.low){
+        toastInline(`${c.name} low in stock – added to Procurement List`);
+        addToProc(c.name);
+      }
+      saveAll(); renderInventory();
+    });
+  });
+}
+function addToProc(name){
+  const p=document.getElementById('procList');
+  const existing=procurements.find(p=>p.name===name);
+  if(existing) return;
+  procurements.push({id:Date.now(),name,status:'Pending'});
+  localStorage.setItem('procurements',JSON.stringify(procurements));
+  renderProcurement();
+}
+
+/* Add Chemical */
+const btnAddChem=document.getElementById('btnAddChemical');
+if(btnAddChem){
+  btnAddChem.addEventListener('click',()=>{
+    const name=prompt('Chemical name:'); if(!name)return;
+    const unit=prompt('Unit (L/kg/ml):','L');
+    const amount=+(prompt('Current amount:','0'));
+    const low=+(prompt('Low stock threshold:','5'));
+    const active=prompt('Active ingredient:','');
+    chemicals.push({name,unit,amount,low,active});
+    saveAll(); renderInventory(); toastInline('💧 Chemical added');
+  });
+}
+renderInventory();
+
+/* ------------------- PROCUREMENT LIST ------------------- */
+let procurements=JSON.parse(localStorage.getItem('procurements')||'[]');
+function renderProcurement(){
+  const list=document.getElementById('procList');
+  if(!list) return;
+  list.innerHTML='';
+  if(procurements.length===0){list.innerHTML='<p>No procurement items.</p>';return;}
+  procurements.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='proc-card';
+    div.innerHTML=`
+      <div>${p.name}</div>
+      <div>
+        <button class="btn" data-action="done" data-i="${i}">Done</button>
+        <button class="btn" data-action="snooze" data-i="${i}">Snooze</button>
+      </div>`;
+    list.appendChild(div);
+  });
+  list.querySelectorAll('[data-action]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const i=btn.dataset.i;
+      if(btn.dataset.action==='done'){
+        procurements.splice(i,1);
+        toastInline('✅ Procurement completed');
+      }else{
+        toastInline('⏰ Snoozed for 1 week');
+      }
+      localStorage.setItem('procurements',JSON.stringify(procurements));
+      renderProcurement();
+    });
+  });
+}
+renderProcurement();
+
+/* ------------------- MAPPING (Via Leaflet) ------------------- */
+let map;
+function initMap(){
+  map=L.map('map').setView([-34.55,148.72],10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  jobs.forEach(j=>{
+    const latlng=[j.lat||-34.55+(Math.random()/10),j.lng||148.72+(Math.random()/10)];
+    const color=j.type==='Road Spray'?'yellow':j.type==='Inspection'?'blue':'green';
+    const marker=L.circleMarker(latlng,{radius:6,color}).addTo(map);
+    marker.bindPopup(`<b>${j.name}</b><br>${j.type}<br>${j.date}`);
+  });
+}
+const mapBtn=document.getElementById('btnLocateMap');
+if(mapBtn){
+  mapBtn.addEventListener('click',()=>{
+    navigator.geolocation.getCurrentPosition(p=>{
+      map.setView([p.coords.latitude,p.coords.longitude],15);
+      L.marker([p.coords.latitude,p.coords.longitude]).addTo(map)
+        .bindPopup('📍 You are here').openPopup();
+    });
+  });
+}
+setTimeout(()=>{ if(document.getElementById('map')) initMap(); },500);
+
+/* ------------------- SETTINGS ------------------- */
+const btnClearAll=document.getElementById('btnClearAll');
+if(btnClearAll){
+  btnClearAll.addEventListener('click',()=>{
+    if(confirm('Delete all data?')){
+      localStorage.clear();
+      toastInline('🗑️ All data cleared');
+      location.reload();
+    }
+  });
+}
+const btnExport=document.getElementById('btnExport');
+if(btnExport){
+  btnExport.addEventListener('click',()=>{
+    const data={jobs,batches,chemicals,reminders,procurements};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='WeedTrackerData.json';
+    a.click();
+    toastInline('📤 Data exported');
+  });
+}
+
+/* ------------------- REMINDERS ------------------- */
+function checkReminders(){
+  const today=todayStr();
+  reminders.filter(r=>r.due===today).forEach(r=>{
+    toastInline(`🔔 Reminder due: ${r.job}`,'warn');
+  });
+}
+setInterval(checkReminders,60000);
+checkReminders();
+
+})();
