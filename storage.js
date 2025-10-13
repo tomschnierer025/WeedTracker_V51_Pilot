@@ -1,51 +1,83 @@
-/* V55 — persistence & libraries */
+/* WeedTracker V55 Pilot – storage.js */
+/* Handles save/load of data, ensuring persistence and fallback */
 
-const STORAGE_KEYS = {
-  jobs: "wt_jobs",
-  batches: "wt_batches",
-  chems: "wt_chems",
-  weeds: "wt_weeds",
-  reminders: "wt_reminders",
-  tracks: "wt_tracks"
-};
+(function(){
+  'use strict';
 
-const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-const load=(k)=>JSON.parse(localStorage.getItem(k)||"[]");
-const genID=(p)=>`${p}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+  const KEY = 'weedtracker_v55_data';
 
-function clearAllData(leaveLibs=true){
-  if(!confirm("Clear ALL jobs, batches, reminders and tracks?"))return;
-  [STORAGE_KEYS.jobs,STORAGE_KEYS.batches,STORAGE_KEYS.reminders,STORAGE_KEYS.tracks].forEach(k=>localStorage.removeItem(k));
-  if(!leaveLibs){ [STORAGE_KEYS.chems,STORAGE_KEYS.weeds].forEach(k=>localStorage.removeItem(k)); }
-  alert("Cleared.");
-}
+  /* ---------------------- SAVE / LOAD / CLEAR ---------------------- */
+  window.saveDB = async function(data){
+    try{
+      localStorage.setItem(KEY, JSON.stringify(data));
+      return true;
+    }catch(err){
+      console.error('Save failed', err);
+      toastInline('⚠️ Failed to save data', 'warn');
+      return false;
+    }
+  };
 
-/* Seed libraries once */
-(function seed(){
-  if(!localStorage.getItem(STORAGE_KEYS.chems)){
-    const chems=[
-      {name:"Glyphosate 540",active:"Glyphosate 540 g/L",quantity:100,unit:"L",low:20},
-      {name:"Metsulfuron",active:"Metsulfuron-methyl 600 g/kg",quantity:5,unit:"kg",low:1},
-      {name:"2,4-D Amine 625",active:"2,4-D 625 g/L",quantity:40,unit:"L",low:8},
-      {name:"Triclopyr/Picloram",active:"Triclopyr 300 + Picloram 100 g/L",quantity:25,unit:"L",low:5},
-      {name:"Clopyralid",active:"Clopyralid 300 g/L",quantity:15,unit:"L",low:3},
-      {name:"Fluroxypyr",active:"Fluroxypyr 200 g/L",quantity:10,unit:"L",low:2},
-      {name:"Penetrant",active:"Non-ionic surfactant",quantity:30,unit:"L",low:6}
-    ]; save(STORAGE_KEYS.chems,chems);
-  }
-  if(!localStorage.getItem(STORAGE_KEYS.weeds)){
-    const weeds=[
-      {name:"Noxious — Cape Broom"},
-      {name:"Noxious — African Lovegrass"},
-      {name:"Noxious — Serrated Tussock"},
-      {name:"Noxious — Paterson’s Curse"},
-      {name:"Noxious — Blackberry"},
-      {name:"Noxious — Horehound"},
-      {name:"Marshmallow"},
-      {name:"St John’s Wort"},
-      {name:"Thistles"},
-      {name:"Sweet Briar"},
-      {name:"Fleabane"}
-    ]; save(STORAGE_KEYS.weeds,weeds);
-  }
+  window.loadDB = async function(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      return raw ? JSON.parse(raw) : null;
+    }catch(err){
+      console.error('Load failed', err);
+      return null;
+    }
+  };
+
+  window.clearDB = async function(){
+    try{
+      localStorage.removeItem(KEY);
+      toastInline('Data cleared', 'ok');
+    }catch(err){
+      console.error('Clear failed', err);
+    }
+  };
+
+  /* -------------------------- EXPORT / IMPORT -------------------------- */
+  window.exportDB = function(){
+    const data = localStorage.getItem(KEY);
+    if(!data){ toastInline('No data to export', 'warn'); return; }
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `weedtracker_backup_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toastInline('Data exported', 'ok');
+  };
+
+  window.importDB = async function(file){
+    try{
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if(data && typeof data === 'object'){
+        localStorage.setItem(KEY, JSON.stringify(data));
+        toastInline('✅ Import successful', 'ok');
+        setTimeout(()=>location.reload(), 800);
+      } else throw new Error('Invalid format');
+    }catch(err){
+      console.error('Import failed', err);
+      toastInline('⚠️ Import failed', 'warn');
+    }
+  };
+
+  /* ---------------------- REPAIR / MIGRATION ---------------------- */
+  window.migrateOldDB = function(){
+    try{
+      const old = localStorage.getItem('weedtracker_data');
+      if(!old) return;
+      const data = JSON.parse(old);
+      if(data) {
+        localStorage.setItem(KEY, JSON.stringify(data));
+        localStorage.removeItem('weedtracker_data');
+        toastInline('Migrated old data to v55', 'ok');
+      }
+    }catch(e){ console.error('Migration error', e); }
+  };
+
 })();
