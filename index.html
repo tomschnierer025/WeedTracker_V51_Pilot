@@ -1,206 +1,180 @@
+<!-- WeedTracker V55 Pilot – index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Weed Tracker V55 Pilot</title>
-  <link rel="stylesheet" href="styles.css"/>
-
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- App -->
-  <script defer src="storage.js"></script>
-  <script defer src="extras.js"></script>
-  <script defer src="apps.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeedTracker V55 Pilot</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" href="icon.png">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
-<body>
-  <!-- Splash -->
-  <div id="splash-screen"><h1>🌿 Weed Tracker V55 Pilot</h1></div>
 
-  <!-- Global top-right Home -->
-  <button id="btnHomeTop" class="home-top" onclick="showPage('home')">🏠 Home</button>
+<body>
+  <header>
+    <h1>🌿 WeedTracker V55 Pilot</h1>
+  </header>
 
   <!-- HOME -->
-  <div id="home" class="page active">
-    <h2 class="app-title">Weed Tracker V55 Pilot</h2>
-    <div class="menu">
-      <button id="btnCreateTask" class="tile tile-blue">🧾 Create Task</button>
-      <button id="btnRecords" class="tile tile-green">📚 Records</button>
-      <button id="btnInventory" class="tile tile-teal">🧪 Chemical Inventory</button>
-      <button id="btnBatches" class="tile tile-purple">⚗️ Batches</button>
-      <button id="btnProcurement" class="tile tile-orange">🛒 Procurement</button>
-      <button id="btnMapping" class="tile tile-yellow">🗺️ Mapping</button>
-      <button id="btnReminders" class="tile tile-cyan">⏰ Reminders</button>
-      <button id="btnSettings" class="tile tile-grey">⚙️ Settings</button>
+  <section id="view-home" class="fade-in">
+    <div id="homeButtons">
+      <div class="home-btn" data-view="view-create">🧾 Create Task</div>
+      <div class="home-btn" data-view="view-records">📋 Records</div>
+      <div class="home-btn" data-view="view-batches">🧪 Batches</div>
+      <div class="home-btn" data-view="view-inventory">💧 Chemical Inventory</div>
+      <div class="home-btn" data-view="view-procurement">🛒 Procurement List</div>
+      <div class="home-btn" data-view="view-map">🗺️ Mapping</div>
+      <div class="home-btn" data-view="view-settings">⚙️ Settings</div>
     </div>
-  </div>
+  </section>
 
   <!-- CREATE TASK -->
-  <div id="createTask" class="page">
-    <div class="section">
-      <div class="section-title">1) Task Type</div>
+  <section id="view-create" class="hidden">
+    <h2>Create Task</h2>
+    <form id="taskForm">
+      <label>Job Type</label>
       <select id="jobType">
-        <option>Inspection</option>
-        <option>SpotSpray</option>
-        <option>Roadside</option>
+        <option value="">Select Type</option>
+        <option value="Inspection">Inspection</option>
+        <option value="Spot Spray">Spot Spray</option>
+        <option value="Road Spray">Road Spray</option>
       </select>
-    </div>
 
-    <div class="section">
-      <div class="section-title">2) Location</div>
-      <input id="locationInput" placeholder="Road / Reserve / Site name"/>
-      <div class="row-compact">
-        <button class="action" id="btnLocate">Locate Me</button>
-        <span id="gpsPreview" class="muted">GPS: —</span>
-      </div>
-    </div>
+      <label>Location</label>
+      <input id="jobLocation" readonly placeholder="Click Locate Me">
+      <button type="button" id="btnLocate" class="btn blue">📍 Locate Me</button>
 
-    <div class="section">
-      <div class="section-title">3) Tracking (Roadside shows Start/Stop)</div>
-      <div class="row-compact">
-        <label>Date:</label><input id="jobDate" type="date"/>
-        <label>Start:</label><input id="startTime" type="time"/>
-        <label>Finish:</label><input id="stopTime" type="time"/>
-      </div>
-      <div id="roadTracking" class="row-compact" style="display:none">
-        <button class="action" id="btnStartTrack">Start Tracking</button>
-        <button class="action" id="btnStopTrack" disabled>Stop Tracking</button>
-        <span id="trackInfo" class="muted">Route: —</span>
-      </div>
-    </div>
+      <label>Job Name (Auto)</label>
+      <input id="jobName" readonly placeholder="Auto-generated from road + date">
 
-    <div class="section">
-      <div class="section-title">4) Auto Name & Weather</div>
-      <div class="row-compact">
-        <button class="action" id="btnAutoName">Auto-Generate</button>
-        <span id="jobNamePreview" class="muted">Name: —</span>
-      </div>
-      <div class="weather-grid">
-        <div class="wbox"><div class="wlabel">Temp</div><div id="wTemp" class="wval">—</div></div>
-        <div class="wbox"><div class="wlabel">Wind</div><div id="wWind" class="wval">—</div></div>
-        <div class="wbox"><div class="wlabel">Direction</div><div id="wDir" class="wval">—</div></div>
-        <div class="wbox"><div class="wlabel">Humidity</div><div id="wHum" class="wval">—</div></div>
-      </div>
-      <button class="action" id="btnWeather">Pull Weather</button>
-    </div>
+      <label>Council Job Number (optional)</label>
+      <input id="councilNumber" placeholder="e.g. 12345">
 
-    <div class="section">
-      <div class="section-title">5) Weed & Batch</div>
-      <input id="weedSearch" placeholder="Search weeds…"/>
-      <select id="weedSelect"></select>
-      <div class="row-compact">
-        <label>Batch:</label>
-        <select id="batchSelect"></select>
-        <button class="action" id="btnNewBatch">New Batch</button>
-      </div>
-    </div>
+      <label>Date</label>
+      <input type="date" id="jobDate">
 
-    <div class="section">
-      <div class="section-title">6) Photos & Notes</div>
-      <input id="photoFile" type="file" accept="image/*"/>
-      <textarea id="jobNotes" rows="4" placeholder="Notes…"></textarea>
-      <div class="row-compact">
-        <label>Link Job #:</label><input id="linkJobId" placeholder="Paste an existing Job ID to link"/>
+      <h3>🌦 Weather</h3>
+      <div class="wx-grid">
+        <div class="wx-cell"><label>Temp</label><input id="wxTemp" placeholder="°C"></div>
+        <div class="wx-cell"><label>Wind Speed</label><input id="wxWind" placeholder="km/h"></div>
+        <div class="wx-cell"><label>Wind Dir</label><input id="wxDir" placeholder="N, SW, etc"></div>
+        <div class="wx-cell"><label>Dir °</label><input id="wxDirDeg" placeholder="0–360"></div>
+        <div class="wx-cell"><label>Humidity</label><input id="wxHum" placeholder="%"></div>
       </div>
-      <div class="row-compact">
-        <label>Status:</label>
-        <label><input type="radio" name="status" value="Incomplete" checked/> Incomplete</label>
-        <label><input type="radio" name="status" value="Complete"/> Complete</label>
-      </div>
-    </div>
 
-    <div class="section">
-      <div class="section-title">7) Reminder</div>
-      <div class="row-compact">
-        <label>Follow-up (weeks):</label>
-        <select id="reminderWeeks"><option value="0">No reminder</option></select>
-      </div>
-    </div>
+      <h3>🌱 Weeds</h3>
+      <select id="weedSelect">
+        <option value="">Select Weed</option>
+        <option disabled>──────────────</option>
+        <option>Noxious Weeds</option>
+        <option>African Lovegrass</option>
+        <option>Fleabane</option>
+        <option>St John’s Wort</option>
+        <option>Bathurst Burr</option>
+        <option>Fireweed</option>
+        <option>Paterson’s Curse</option>
+      </select>
 
-    <div class="section">
-      <button class="action success" id="btnSaveJob">Save</button>
-      <button class="action" id="btnSaveDraft">Save as Draft</button>
+      <h3>🧪 Batch</h3>
+      <select id="batchSelect">
+        <option value="">Select Batch</option>
+      </select>
+
+      <label>Notes</label>
+      <textarea id="jobNotes" placeholder="Add any notes..."></textarea>
+
+      <h3>Status</h3>
+      <label><input type="radio" name="jobStatus" value="Incomplete" checked> Incomplete</label>
+      <label><input type="radio" name="jobStatus" value="Complete"> Complete</label>
+
+      <label>Reminder (Weeks)</label>
+      <select id="reminderWeeks">
+        <option value="0">None</option>
+        ${Array.from({ length: 52 }, (_, i) => `<option value="${i+1}">${i+1}</option>`).join('')}
+      </select>
+
+      <div style="margin-top:15px;text-align:center;">
+        <button type="button" id="btnStartTracking" class="btn blue">▶️ Start Tracking</button>
+        <button type="button" id="btnStopTracking" class="btn">⏹ Stop Tracking</button>
+        <button type="submit" class="btn blue">💾 Save Task</button>
+        <button type="button" id="btnDraft" class="btn">📝 Save as Draft</button>
+      </div>
+    </form>
+    <div style="margin-top:20px;">
+      <button class="btn" data-home>🏠 Home</button>
     </div>
-  </div>
+  </section>
 
   <!-- RECORDS -->
-  <div id="records" class="page">
-    <div class="filters">
-      <input id="recordsSearch" placeholder="Search name / weed / road…"/>
-      <select id="recordsType"><option>All</option><option>Inspection</option><option>SpotSpray</option><option>Roadside</option></select>
-      <select id="recordsStatus"><option>All</option><option>Complete</option><option>Incomplete</option><option>Draft</option></select>
-      <label>From:</label><input id="recordsFrom" type="date"/>
-      <label>To:</label><input id="recordsTo" type="date"/>
-      <button class="action" id="btnRecordsFilter">Search</button>
+  <section id="view-records" class="hidden">
+    <h2>Records</h2>
+    <div id="recordFilters" style="margin-bottom:10px;">
+      <label>Search by:</label>
+      <input id="searchText" placeholder="Weed, Job name, etc.">
+      <label>Date Range</label>
+      <input type="date" id="searchStart"> to <input type="date" id="searchEnd">
+      <button id="btnSearch" class="btn blue">Search</button>
     </div>
-    <div id="recordsList" class="list"></div>
-  </div>
-
-  <!-- INVENTORY -->
-  <div id="inventory" class="page">
-    <div class="filters">
-      <input id="chemSearch" placeholder="Search chemicals…"/>
-      <button class="action" id="btnAddChem">Add Chemical</button>
+    <div id="recordList"></div>
+    <div style="margin-top:20px;">
+      <button class="btn" data-home>🏠 Home</button>
     </div>
-    <div id="chemList" class="list"></div>
-  </div>
+  </section>
 
   <!-- BATCHES -->
-  <div id="batches" class="page">
-    <div class="filters">
-      <input id="batchSearch" placeholder="Search batch id…"/>
-      <label>From:</label><input id="batchFrom" type="date"/>
-      <label>To:</label><input id="batchTo" type="date"/>
-      <button class="action" id="btnBatchFilter">Search</button>
-      <button class="action" id="btnCreateBatch">Create Batch</button>
+  <section id="view-batches" class="hidden">
+    <h2>Batches</h2>
+    <div id="batchList"></div>
+    <button class="btn blue" id="btnAddBatch">➕ Create Batch</button>
+    <div style="margin-top:20px;">
+      <button class="btn" data-home>🏠 Home</button>
     </div>
-    <div id="batchList" class="list"></div>
-  </div>
+  </section>
+
+  <!-- INVENTORY -->
+  <section id="view-inventory" class="hidden">
+    <h2>Chemical Inventory</h2>
+    <div id="inventoryList"></div>
+    <button class="btn blue" id="btnAddChemical">➕ Add Chemical</button>
+    <div style="margin-top:20px;">
+      <button class="btn" data-home>🏠 Home</button>
+    </div>
+  </section>
 
   <!-- PROCUREMENT -->
-  <div id="procurement" class="page">
-    <div id="procureList" class="list"></div>
-  </div>
+  <section id="view-procurement" class="hidden">
+    <h2>Procurement List</h2>
+    <div id="procList"></div>
+    <div style="margin-top:20px;">
+      <button class="btn" data-home>🏠 Home</button>
+    </div>
+  </section>
 
   <!-- MAP -->
-  <div id="map" class="page">
-    <div class="filters">
-      <select id="mapType"><option>All</option><option>Inspection</option><option>SpotSpray</option><option>Roadside</option></select>
-      <select id="mapStatus"><option>All</option><option>Open</option><option>Closed</option></select>
-      <label>From:</label><input id="mapFrom" type="date"/>
-      <label>To:</label><input id="mapTo" type="date"/>
-      <button class="action" id="btnMapFilter">Filter</button>
-      <button class="action" id="btnLocateMe">Locate Me</button>
+  <section id="view-map" class="hidden">
+    <h2>Mapping</h2>
+    <button class="btn blue" id="btnLocateMap">📍 Locate Me</button>
+    <div id="map"></div>
+    <div style="margin-top:20px;">
+      <button class="btn" data-home>🏠 Home</button>
     </div>
-    <div id="mapView"></div>
-  </div>
-
-  <!-- REMINDERS -->
-  <div id="reminders" class="page">
-    <div id="reminderList" class="list"></div>
-  </div>
+  </section>
 
   <!-- SETTINGS -->
-  <div id="settings" class="page">
-    <div class="section">
-      <div class="section-title">Data</div>
-      <div class="row-compact">
-        <button class="action" id="btnExportJSON">Export JSON</button>
-        <button class="action" id="btnExportCSV">Export CSV</button>
-        <button class="action danger" id="btnClearData">Clear ALL Local Data</button>
-      </div>
-      <div class="muted small">Clears jobs, batches, reminders (keeps weed & chemical library).</div>
+  <section id="view-settings" class="hidden">
+    <h2>Settings</h2>
+    <button class="btn blue" id="btnExport">📤 Export Data</button>
+    <button class="btn" id="btnClearAll">🗑️ Clear All Data</button>
+    <div style="margin-top:20px;">
+      <button class="btn" data-home>🏠 Home</button>
     </div>
-  </div>
+  </section>
 
-  <!-- Modal -->
-  <div id="modal" class="popup" role="dialog" aria-modal="true"></div>
+  <!-- TOAST -->
+  <div id="toast" class="toast"></div>
 
-  <script>
-    // Fill weeks 1..52 in <select>
-    (function(){const w=document.getElementById('reminderWeeks');for(let i=1;i<=52;i++){const o=document.createElement('option');o.value=i;o.textContent=i;w.appendChild(o);}})();
-  </script>
+  <script src="storage.js"></script>
+  <script src="apps.js"></script>
 </body>
 </html>
