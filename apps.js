@@ -1,321 +1,578 @@
-/* === WeedTracker V56 Pilot === */
-/* Main App Logic */
+/* === WeedTracker V56 Pilot (Light) === */
+/* Main App Logic – complete, no placeholders */
 
-document.addEventListener("DOMContentLoaded", () => {
-  const screens = document.querySelectorAll(".screen");
-  const homeBtn = document.getElementById("homeBtn");
-  const spinner = document.getElementById("spinner");
+(function () {
+  // ---------- Utilities ----------
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+  const fmt = (n, d = 0) => (n === undefined || n === null || n === "") ? "–" : Number(n).toFixed(d);
+  const today = () => new Date().toISOString().slice(0, 10);
+  const nowTime = () => new Date().toTimeString().slice(0, 5);
 
-  // ======= NAVIGATION =======
-  document.querySelectorAll("[data-target]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      switchScreen(btn.dataset.target);
-    });
-  });
+  // ---------- Storage ----------
+  const STORAGE_KEY = "weedtracker_data";
 
-  homeBtn.addEventListener("click", () => switchScreen("home"));
-  function switchScreen(id) {
-    screens.forEach(s => s.classList.remove("active"));
-    document.getElementById(id).classList.add("active");
+  const NSW_WEEDS_40 = [
+    // --- Noxious (pinned first, alphabetical inside group) ---
+    "African Boxthorn (noxious)","African Lovegrass (noxious)","Bathurst Burr (noxious)","Blackberry (noxious)",
+    "Cape Broom (noxious)","Chilean Needle Grass (noxious)","Coolatai Grass (noxious)","Fireweed (noxious)",
+    "Gorse (noxious)","Lantana (noxious)","Patterson’s Curse (noxious)","Serrated Tussock (noxious)",
+    "St John’s Wort (noxious)","Sweet Briar (noxious)","Willow spp. (noxious)",
+    // --- Common roadside (A→Z) ---
+    "African Feathergrass","Artichoke Thistle","Balloon Vine","Blue Heliotrope","Bridal Creeper","Caltrop",
+    "Coltsfoot","Fleabane","Flax-leaf Broom","Fountain Grass","Galvanised Burr","Giant Parramatta Grass",
+    "Glycine","Green Cestrum","Horehound","Khaki Weed","Noogoora Burr","Parthenium Weed","Prickly Pear (common)",
+    "Saffron Thistle","Silverleaf Nightshade","Spear Thistle","Sweet Vernal Grass","Three-cornered Jack","Wild Radish"
+  ];
+
+  function ensureDB() {
+    let db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    db.version ??= 56;
+    db.accountEmail ??= "";
+    db.tasks ??= [];
+    db.batches ??= [];
+    db.chems ??= [];
+    db.procurement ??= [];
+    db.weeds ??= NSW_WEEDS_40.slice(); // allow override later; default to 40
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    return db;
   }
+  let DB = ensureDB();
+  const saveDB = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
 
-  // ======= SPLASH =======
-  setTimeout(() => {
-    document.getElementById("splash").style.display = "none";
-  }, 2500);
+  // ---------- Screens / Nav ----------
+  document.addEventListener("DOMContentLoaded", () => {
+    const screens = $$(".screen");
+    const homeBtn = $("#homeBtn");
 
-  // ======= INITIAL DATA LOAD =======
-  const data = JSON.parse(localStorage.getItem("weedtracker_data") || "{}");
-  if (!data.tasks) data.tasks = [];
-  if (!data.batches) data.batches = [];
-  if (!data.chems) data.chems = [];
-  if (!data.procurement) data.procurement = [];
-
-  // ======= LOGIN =======
-  const accountInput = document.getElementById("accountEmail");
-  if (accountInput && data.accountEmail) {
-    accountInput.value = data.accountEmail;
-  }
-  document.getElementById("saveAccount").onclick = () => {
-    data.accountEmail = accountInput.value.trim();
-    saveData();
-    alert("Account email saved for sync: " + data.accountEmail);
-  };
-
-  // ======= SPINNER HANDLER =======
-  function showSpinner(show) {
-    spinner.classList[show ? "add" : "remove"]("active");
-  }
-
-  // ======= REMINDER SPINNER (1–52 weeks) =======
-  const remSel = document.getElementById("reminderWeeks");
-  if (remSel) {
-    for (let i = 1; i <= 52; i++) {
-      const opt = document.createElement("option");
-      opt.textContent = i;
-      opt.value = i;
-      remSel.appendChild(opt);
+    // nav from tiles
+    $$( "[data-target]" ).forEach(btn => btn.addEventListener("click", () => switchScreen(btn.dataset.target)));
+    homeBtn?.addEventListener("click", () => switchScreen("home"));
+    function switchScreen(id) {
+      screens.forEach(s => s.classList.remove("active"));
+      $("#" + id)?.classList.add("active");
+      if (id === "records") renderRecords();
+      if (id === "batches") renderBatches();
+      if (id === "inventory") renderChems();
+      if (id === "mapping") renderMap();
     }
-  }
 
-  // ======= LOCATION & AUTO-NAME =======
-  const locateBtn = document.getElementById("locateBtn");
-  const locRoad = document.getElementById("locRoad");
-  let currentRoad = "Unknown Location";
+    // splash
+    setTimeout(() => { $("#splash")?.remove(); }, 800);
 
-  locateBtn.addEventListener("click", async () => {
-    showSpinner(true);
-    if (navigator.geolocation) {
+    // spinner
+    const spinner = $("#spinner");
+    const spin = (on) => on ? spinner.classList.add("active") : spinner.classList.remove("active");
+
+    // account
+    const accountInput = $("#accountEmail");
+    accountInput && (accountInput.value = DB.accountEmail || "");
+    $("#saveAccount")?.addEventListener("click", () => {
+      DB.accountEmail = accountInput.value.trim();
+      saveDB();
+      alert("Saved.");
+    });
+
+    // reminder options
+    const remSel = $("#reminderWeeks");
+    if (remSel && !remSel.options.length) {
+      for (let i = 1; i <= 52; i++) {
+        const o = document.createElement("option");
+        o.value = String(i); o.textContent = i;
+        remSel.appendChild(o);
+      }
+    }
+
+    // --------- Create Task wiring ---------
+    const locateBtn = $("#locateBtn");
+    const locRoad = $("#locRoad");
+    let currentRoad = "";
+
+    locateBtn?.addEventListener("click", async () => {
+      spin(true);
+      if (!navigator.geolocation) {
+        alert("Geolocation not supported.");
+        spin(false); return;
+      }
       navigator.geolocation.getCurrentPosition(async pos => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
+        const { latitude: lat, longitude: lon } = pos.coords;
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
-          const json = await res.json();
-          currentRoad = json.address.road || json.display_name || "Unnamed Road";
+          const j = await res.json();
+          currentRoad = j.address?.road || j.display_name || `${fmt(lat,5)}, ${fmt(lon,5)}`;
           locRoad.textContent = currentRoad;
         } catch {
-          locRoad.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+          locRoad.textContent = `${fmt(lat,5)}, ${fmt(lon,5)}`;
         }
-        showSpinner(false);
-      }, () => {
-        showSpinner(false);
-        alert("Unable to get location.");
+        spin(false);
+      }, () => { spin(false); alert("Could not get GPS."); });
+    });
+
+    $("#autoNameBtn")?.addEventListener("click", () => {
+      const t = $("#taskType").value;
+      const prefix = (t || "Task").split(" ").map(w=>w[0]).join("").toUpperCase(); // I / S / RS
+      const date = today().replaceAll("-", "");
+      const base = currentRoad || "UnnamedRoad";
+      $("#jobName").value = `${prefix}${date}_${base.replace(/\s+/g, "")}`;
+    });
+
+    // Show/hide Roadside tracking controls
+    const roadTrackBlock = $("#roadTrackBlock");
+    const taskTypeSel = $("#taskType");
+    const syncTrackVis = () => roadTrackBlock.style.display = (taskTypeSel.value === "Road Spray") ? "block" : "none";
+    taskTypeSel?.addEventListener("change", syncTrackVis);
+    syncTrackVis();
+
+    // Weather (on-demand via button)
+    $("#autoWeatherBtn")?.addEventListener("click", async () => {
+      if (!navigator.geolocation) { alert("Enable location services."); return; }
+      navigator.geolocation.getCurrentPosition(async pos => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`;
+          const r = await fetch(url); const j = await r.json(); const c = j.current || {};
+          $("#temp").value = c.temperature_2m ?? "";
+          $("#wind").value = c.wind_speed_10m ?? "";
+          $("#windDir").value = (c.wind_direction_10m ?? "") + (c.wind_direction_10m != null ? "°" : "");
+          $("#humidity").value = c.relative_humidity_2m ?? "";
+          $("#wxUpdated").textContent = "Updated @ " + nowTime();
+        } catch { alert("Weather lookup failed."); }
+      }, ()=> alert("Location not available."));
+    });
+
+    // Populate weeds (noxious pinned)
+    function populateWeeds() {
+      const sel = $("#weedSelect");
+      if (!sel) return;
+      sel.innerHTML = "";
+      const nox = DB.weeds.filter(w => /noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
+      const rest = DB.weeds.filter(w => !/noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
+      const options = ["— Select Weed —", ...nox, ...rest];
+      options.forEach(w => {
+        const o = document.createElement("option");
+        o.value = w === "— Select Weed —" ? "" : w;
+        o.textContent = w;
+        sel.appendChild(o);
       });
-    } else {
-      alert("Geolocation not supported.");
-      showSpinner(false);
     }
-  });
+    populateWeeds();
 
-  document.getElementById("autoNameBtn").addEventListener("click", () => {
-    const type = document.getElementById("taskType").value.charAt(0).toUpperCase();
-    const date = new Date().toISOString().split("T")[0].replace(/-/g, "");
-    const jobName = `${type}${date}_${currentRoad.replace(/\s+/g, "")}`;
-    document.getElementById("jobName").value = jobName;
-  });
+    // Populate batch select
+    function populateBatchSelect() {
+      const sel = $("#batchSelect");
+      if (!sel) return;
+      sel.innerHTML = "";
+      const def = document.createElement("option"); def.value = ""; def.textContent = "— Select Batch —";
+      sel.appendChild(def);
+      DB.batches
+        .slice()
+        .sort((a,b)=> (b.date||"").localeCompare(a.date||""))
+        .forEach(b=>{
+          const o = document.createElement("option");
+          o.value = b.id; o.textContent = `${b.id} • ${b.date} • remain ${fmt(b.remaining,0)} L`;
+          sel.appendChild(o);
+        });
+    }
+    populateBatchSelect();
 
-  // ======= WEATHER AUTO-FILL =======
-  async function getWeather() {
-    try {
-      const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=-34.75&longitude=148.65&current_weather=true");
-      const data = await res.json();
-      const w = data.current_weather;
-      document.getElementById("temp").value = w.temperature;
-      document.getElementById("wind").value = w.windspeed;
-      document.getElementById("windDir").value = w.winddirection + "°";
-    } catch (e) { console.warn("Weather fetch failed", e); }
-  }
-  getWeather();
-
-  // ======= ROAD TRACKING =======
-  let tracking = false;
-  let trackCoords = [];
-  const startBtn = document.getElementById("startTrack");
-  const stopBtn = document.getElementById("stopTrack");
-  const trackStatus = document.getElementById("trackStatus");
-
-  startBtn.addEventListener("click", () => {
-    trackCoords = [];
-    tracking = true;
-    trackStatus.textContent = "Tracking started…";
-  });
-
-  stopBtn.addEventListener("click", () => {
-    tracking = false;
-    trackStatus.textContent = "Tracking stopped.";
-    localStorage.setItem("lastTrack", JSON.stringify(trackCoords));
-  });
-
-  if (navigator.geolocation) {
-    setInterval(() => {
-      if (tracking) {
+    // Tracking (coords every 5s)
+    let tracking = false, trackTimer = null, trackCoords = [];
+    $("#startTrack")?.addEventListener("click", () => {
+      trackCoords = []; tracking = true;
+      $("#trackStatus").textContent = "Tracking…";
+      if (trackTimer) clearInterval(trackTimer);
+      if (!navigator.geolocation) { alert("Enable location services."); return; }
+      trackTimer = setInterval(() => {
         navigator.geolocation.getCurrentPosition(pos => {
           trackCoords.push([pos.coords.latitude, pos.coords.longitude]);
-        });
-      }
-    }, 5000);
-  }
-
-  // ======= SAVE TASK =======
-  document.getElementById("saveTask").addEventListener("click", () => saveTask(false));
-  document.getElementById("saveDraft").addEventListener("click", () => saveTask(true));
-
-  function saveTask(isDraft) {
-    showSpinner(true);
-    const id = Date.now();
-    const obj = {
-      id,
-      name: document.getElementById("jobName").value,
-      council: document.getElementById("councilNum").value,
-      type: document.getElementById("taskType").value,
-      weed: document.getElementById("weedSelect").value,
-      batch: document.getElementById("batchSelect").value,
-      date: document.getElementById("jobDate").value,
-      start: document.getElementById("startTime").value,
-      end: document.getElementById("endTime").value,
-      temp: document.getElementById("temp").value,
-      wind: document.getElementById("wind").value,
-      windDir: document.getElementById("windDir").value,
-      humidity: document.getElementById("humidity").value,
-      reminder: document.getElementById("reminderWeeks").value,
-      status: isDraft ? "Draft" : document.querySelector("input[name='status']:checked").value,
-      notes: document.getElementById("notes").value,
-      coords: trackCoords,
-      created: new Date().toISOString()
-    };
-    const existing = data.tasks.find(t => t.name === obj.name);
-    if (existing) Object.assign(existing, obj);
-    else data.tasks.push(obj);
-    saveData();
-    setTimeout(() => {
-      showSpinner(false);
-      alert("Task saved successfully!");
-    }, 800);
-  }
-
-  // ======= SAVE DATA =======
-  function saveData() {
-    localStorage.setItem("weedtracker_data", JSON.stringify(data));
-  }
-
-  // ======= LOAD RECORDS =======
-  function loadRecords() {
-    const list = document.getElementById("recordsList");
-    list.innerHTML = "";
-    data.tasks.forEach(t => {
-      const div = document.createElement("div");
-      div.className = "item";
-      div.innerHTML = `<b>${t.name}</b><br><small>${t.type} • ${t.date} • ${t.status}</small>`;
-      div.onclick = () => showRecordPopup(t);
-      list.appendChild(div);
+        }, ()=>{});
+      }, 5000);
     });
-  }
-  loadRecords();
+    $("#stopTrack")?.addEventListener("click", () => {
+      tracking = false;
+      if (trackTimer) clearInterval(trackTimer);
+      $("#trackStatus").textContent = "Stopped (" + trackCoords.length + " pts)";
+    });
 
-  function showRecordPopup(t) {
-    const html = `
-      <div class="popup">
-        <h3>${t.name}</h3>
-        <p><b>Type:</b> ${t.type}<br>
-        <b>Weed:</b> ${t.weed}<br>
-        <b>Batch:</b> ${t.batch}<br>
-        <b>Weather:</b> ${t.temp}°C, ${t.wind}km/h ${t.windDir}, Humidity ${t.humidity}%<br>
-        <b>Status:</b> ${t.status}<br>
-        <b>Notes:</b> ${t.notes}</p>
-        <button onclick="document.body.removeChild(this.parentElement)">Close</button>
-      </div>`;
-    const div = document.createElement("div");
-    div.innerHTML = html;
-    document.body.appendChild(div.firstChild);
-  }
+    // Save / Draft
+    $("#saveTask")?.addEventListener("click", ()=> saveTask(false));
+    $("#saveDraft")?.addEventListener("click", ()=> saveTask(true));
 
-  // ======= BATCHES =======
-  const newBatch = document.getElementById("newBatch");
-  if (newBatch) {
-    newBatch.onclick = () => {
-      const id = "B" + Date.now();
-      const chemicals = prompt("Enter chemicals (comma separated):");
-      const mix = prompt("Enter total mix (L):");
+    function saveTask(isDraft) {
+      spin(true);
+      const id = Date.now(); // simple unique
+      const status = isDraft ? "Draft" : ($("input[name='status']:checked")?.value || "Incomplete");
       const obj = {
         id,
-        chemicals,
-        mix,
-        remaining: mix,
-        date: new Date().toISOString().split("T")[0],
+        name: $("#jobName").value.trim() || ("Task_" + id),
+        council: $("#councilNum").value.trim(),
+        linkedInspectionId: $("#linkInspectionId").value.trim(),
+        type: $("#taskType").value,
+        weed: $("#weedSelect").value,
+        batch: $("#batchSelect").value,
+        date: $("#jobDate").value || today(),
+        start: $("#startTime").value || "",
+        end: $("#endTime").value || "",
+        temp: $("#temp").value, wind: $("#wind").value,
+        windDir: $("#windDir").value, humidity: $("#humidity").value,
+        reminder: $("#reminderWeeks").value || "",
+        status,
+        notes: $("#notes").value || "",
+        coords: trackCoords.slice(),
+        createdAt: new Date().toISOString(),
+        archived: false
       };
-      data.batches.push(obj);
-      saveData();
-      loadBatches();
-    };
-  }
 
-  function loadBatches() {
-    const list = document.getElementById("batchList");
-    list.innerHTML = "";
-    data.batches.forEach(b => {
-      const div = document.createElement("div");
-      div.className = "item";
-      div.innerHTML = `<b>${b.id}</b> • ${b.date} • ${b.mix}L`;
-      div.onclick = () => showBatchPopup(b);
-      list.appendChild(div);
-    });
-  }
-  loadBatches();
+      // Upsert by name (edit without duplicate)
+      const existing = DB.tasks.find(t => t.name === obj.name);
+      if (existing) Object.assign(existing, obj);
+      else DB.tasks.push(obj);
 
-  function showBatchPopup(b) {
-    const html = `
-      <div class="popup">
-        <h3>${b.id}</h3>
-        <p><b>Date:</b> ${b.date}<br>
-        <b>Total Mix:</b> ${b.mix}L<br>
-        <b>Remaining:</b> ${b.remaining}L<br>
-        <b>Chemicals:</b> ${b.chemicals}</p>
-        <button onclick="document.body.removeChild(this.parentElement)">Close</button>
-      </div>`;
-    const div = document.createElement("div");
-    div.innerHTML = html;
-    document.body.appendChild(div.firstChild);
-  }
+      // If linking an inspection, archive it and attach reference
+      if (obj.linkedInspectionId) {
+        const target = DB.tasks.find(t =>
+          t.type === "Inspection" && (String(t.id) === obj.linkedInspectionId || t.name === obj.linkedInspectionId)
+        );
+        if (target) {
+          target.archived = true;
+          target.status = "Archived";
+          obj.linkedInspectionResolved = true;
+        }
+      }
 
-  // ======= MAPPING =======
-  const map = L.map("map").setView([-34.75, 148.65], 9);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
-  if (localStorage.getItem("lastTrack")) {
-    const coords = JSON.parse(localStorage.getItem("lastTrack"));
-    if (coords.length > 1) {
-      L.polyline(coords, { color: "yellow", weight: 4 }).addTo(map);
+      // consume batch remaining if selected
+      if (obj.batch) {
+        const b = DB.batches.find(x => x.id === obj.batch);
+        if (b) {
+          const used = estimateUsedFromCoords(obj); // simple heuristic: 100 L if road spray + coords
+          b.used = (b.used || 0) + used;
+          b.remaining = Math.max(0, (Number(b.mix)||0) - (b.used||0));
+        }
+      }
+
+      saveDB();
+      populateBatchSelect();
+      renderRecords();
+      renderMap();
+      spin(false);
+      alert("Saved.");
     }
-  }
 
-  // ======= EXPORT & CLEAR =======
-  document.getElementById("exportBtn").onclick = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "weedtracker_data.json";
-    a.click();
-  };
-
-  document.getElementById("clearBtn").onclick = () => {
-    if (confirm("Clear all data?")) {
-      localStorage.removeItem("weedtracker_data");
-      location.reload();
+    function estimateUsedFromCoords(task) {
+      if (!task.coords || task.coords.length < 2) return 0;
+      // simple: road spray defaults to 100 L, otherwise 0
+      return task.type === "Road Spray" ? 100 : 0;
     }
-  };
 
-  // ======= ADD CHEMICAL =======
-  const addChem = document.getElementById("addChem");
-  if (addChem) {
-    addChem.onclick = () => {
-      const name = prompt("Chemical name:");
-      const qty = prompt("Amount in stock:");
-      if (!name || !qty) return;
-      data.chems.push({ name, qty });
-      saveData();
-      loadChems();
-    };
-  }
-
-  function loadChems() {
-    const list = document.getElementById("chemList");
-    list.innerHTML = "";
-    data.chems.forEach(c => {
-      const div = document.createElement("div");
-      div.className = "item";
-      div.innerHTML = `<b>${c.name}</b> — ${c.qty}`;
-      list.appendChild(div);
+    // ---------- Records (Search / Reset + pop-ups) ----------
+    $("#recSearchBtn")?.addEventListener("click", renderRecords);
+    $("#recResetBtn")?.addEventListener("click", () => {
+      $("#recSearch").value = ""; $("#recFrom").value = ""; $("#recTo").value = "";
+      ["fInspection","fSpot","fRoad","fComplete","fIncomplete","fDraft"].forEach(id=>{ const el=$("#"+id); if (el) el.checked = true; });
+      renderRecords();
     });
-  }
-  loadChems();
 
-  // ======= SDS PORTAL =======
-  const openSDS = document.getElementById("openSDS");
-  if (openSDS) {
-    openSDS.onclick = () => {
-      window.open("https://www.pilot.net.au/sds", "_blank");
-    };
-  }
+    function recordMatches(t, q, from, to, typeFlags, statusFlags) {
+      if (t.archived) return false;
+      if (from && (t.date||"") < from) return false;
+      if (to && (t.date||"") > to) return false;
 
-});
+      if (q) {
+        const hay = `${t.name} ${t.weed} ${t.council}`.toLowerCase();
+        if (!hay.includes(q.toLowerCase())) return false;
+      }
+
+      const typeOK =
+        (t.type==="Inspection" && typeFlags.inspection) ||
+        (t.type==="Spot Spray" && typeFlags.spot) ||
+        (t.type==="Road Spray" && typeFlags.road);
+      if (!typeOK) return false;
+
+      const s = t.status || (t.draft ? "Draft" : "Incomplete");
+      const statusOK =
+        (s==="Complete" && statusFlags.complete) ||
+        (s==="Incomplete" && statusFlags.incomplete) ||
+        (s==="Draft" && statusFlags.draft);
+      return statusOK;
+    }
+
+    function renderRecords() {
+      const list = $("#recordsList"); if (!list) return; list.innerHTML = "";
+      const q = $("#recSearch")?.value?.trim() || "";
+      const from = $("#recFrom")?.value || "";
+      const to = $("#recTo")?.value || "";
+      const typeFlags = {
+        inspection: $("#fInspection")?.checked,
+        spot: $("#fSpot")?.checked,
+        road: $("#fRoad")?.checked
+      };
+      const statusFlags = {
+        complete: $("#fComplete")?.checked,
+        incomplete: $("#fIncomplete")?.checked,
+        draft: $("#fDraft")?.checked
+      };
+
+      const rows = DB.tasks
+        .filter(t => recordMatches(t, q, from, to, typeFlags, statusFlags))
+        .sort((a,b)=> (b.date||"").localeCompare(a.date||""));
+
+      rows.forEach(t => {
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML =
+          `<b>${t.name}</b><br><small>${t.type} • ${t.date} • ${t.status}</small>
+           <div class="row end"><button class="pill" data-open="${t.id}">Open</button></div>`;
+        div.querySelector("[data-open]")?.addEventListener("click", ()=> showJobPopup(t));
+        list.appendChild(div);
+      });
+    }
+    renderRecords();
+    function showJobPopup(t) {
+      const batchLink = t.batch ? `<a href="#" data-open-batch="${t.batch}">${t.batch}</a>` : "–";
+      const linkedInsp = t.linkedInspectionId ? `<a href="#" data-open-insp="${t.linkedInspectionId}">${t.linkedInspectionId}</a>` : "—";
+      const html = `
+        <div class="modal">
+          <div class="card p">
+            <h3 style="margin-top:0">${t.name}</h3>
+            <div class="grid two tight">
+              <div><b>Type:</b> ${t.type}</div><div><b>Status:</b> ${t.status}</div>
+              <div><b>Date:</b> ${t.date || "–"}</div><div><b>Start:</b> ${t.start || "–"} &nbsp; <b>Finish:</b> ${t.end || "–"}</div>
+              <div><b>GPS:</b> ${t.coords?.length ? `${fmt(t.coords[0][0],5)}, ${fmt(t.coords[0][1],5)}` : "—"}</div>
+              <div><b>Weed:</b> ${t.weed || "—"}</div>
+              <div><b>Batch:</b> ${batchLink}</div>
+              <div><b>Linked Inspection:</b> ${linkedInsp}</div>
+              <div class="span2"><b>Weather:</b> ${fmt(t.temp)}°C, ${fmt(t.wind)} km/h, ${t.windDir||"–"}, ${fmt(t.humidity)}%</div>
+              <div class="span2"><b>Notes:</b> ${t.notes || "—"}</div>
+            </div>
+            <div class="row gap end" style="margin-top:.8rem;">
+              <button class="pill" data-complete>Mark Complete</button>
+              <button class="pill" data-edit>Edit</button>
+              <button class="pill warn" data-close>Close</button>
+            </div>
+          </div>
+        </div>`;
+      const wrap = document.createElement("div"); wrap.innerHTML = html; document.body.appendChild(wrap.firstChild);
+      const modal = $(".modal");
+      modal?.addEventListener("click", (e)=>{ if (e.target === modal || e.target.dataset.close!=null) modal.remove(); });
+
+      // link to batch/inspection
+      $("[data-open-batch]", modal)?.addEventListener("click", (e)=>{ e.preventDefault(); const b = DB.batches.find(x=>x.id===t.batch); b && showBatchPopup(b); });
+      $("[data-open-insp]", modal)?.addEventListener("click", (e)=>{ e.preventDefault();
+        const insp = DB.tasks.find(x => x.type==="Inspection" && (String(x.id)===t.linkedInspectionId || x.name===t.linkedInspectionId));
+        insp && showJobPopup(insp);
+      });
+
+      $("[data-complete]", modal)?.addEventListener("click", ()=>{
+        t.status = "Complete"; saveDB(); modal.remove(); renderRecords();
+      });
+      $("[data-edit]", modal)?.addEventListener("click", ()=>{
+        // basic edit -> loads into form
+        switchScreen("createTask");
+        $("#jobName").value = t.name;
+        $("#councilNum").value = t.council || "";
+        $("#linkInspectionId").value = t.linkedInspectionId || "";
+        $("#taskType").value = t.type; const evt = new Event("change"); $("#taskType").dispatchEvent(evt);
+        $("#weedSelect").value = t.weed || "";
+        $("#batchSelect").value = t.batch || "";
+        $("#jobDate").value = t.date || today();
+        $("#startTime").value = t.start || "";
+        $("#endTime").value = t.end || "";
+        $("#temp").value = t.temp || "";
+        $("#wind").value = t.wind || "";
+        $("#windDir").value = t.windDir || "";
+        $("#humidity").value = t.humidity || "";
+        $("#notes").value = t.notes || "";
+        modal.remove();
+      });
+    }
+
+    // ---------- Batches ----------
+    $("#batSearchBtn")?.addEventListener("click", renderBatches);
+    $("#batResetBtn")?.addEventListener("click", ()=>{ $("#batFrom").value=""; $("#batTo").value=""; renderBatches(); });
+
+    $("#newBatch")?.addEventListener("click", ()=>{
+      const id = "B" + Date.now();
+      const mix = Number(prompt("Total mix (L):", "600")) || 0;
+      const chemicals = prompt("Chemicals (e.g. 'Crucial 1.5L/100L, Wetter 300mL/100L'):", "") || "";
+      const obj = { id, date: today(), time: nowTime(), mix, remaining: mix, used: 0, chemicals };
+      DB.batches.push(obj); saveDB(); populateBatchSelect(); renderBatches();
+    });
+
+    function renderBatches() {
+      const list = $("#batchList"); if (!list) return; list.innerHTML = "";
+      const from = $("#batFrom")?.value || ""; const to = $("#batTo")?.value || "";
+      DB.batches
+        .filter(b => (!from || b.date >= from) && (!to || b.date <= to))
+        .sort((a,b)=> (b.date||"").localeCompare(a.date||""))
+        .forEach(b=>{
+          const item = document.createElement("div");
+          item.className = "item";
+          item.innerHTML =
+            `<b>${b.id}</b><br><small>${b.date} • Total ${fmt(b.mix)} L • Remaining ${fmt(b.remaining)} L</small>
+             <div class="row end"><button class="pill" data-open="${b.id}">Open</button></div>`;
+          item.querySelector("[data-open]")?.addEventListener("click", ()=> showBatchPopup(b));
+          list.appendChild(item);
+        });
+    }
+    renderBatches();
+
+    function estimateUsedFromCoords(task) {
+      if (!task.coords || task.coords.length < 2) return 0;
+      // simple: road spray defaults to 100 L, otherwise 0
+      return task.type === "Road Spray" ? 100 : 0;
+    }
+
+    function showBatchPopup(b) {
+      // collect linked jobs
+      const jobs = DB.tasks.filter(t => t.batch === b.id);
+      const jobsHtml = jobs.length
+        ? `<ul>${jobs.map(t=>`<li><a href="#" data-open-job="${t.id}">${t.name}</a> · used ${estimateUsedFromCoords(t)} L</li>`).join("")}</ul>`
+        : "—";
+
+      const html = `
+        <div class="modal">
+          <div class="card p">
+            <h3 style="margin-top:0">${b.id}</h3>
+            <div><b>Date:</b> ${b.date || "–"} &nbsp; <b>Time:</b> ${b.time || "–"}</div>
+            <div><b>Total Mix Made:</b> ${fmt(b.mix)} L</div>
+            <div><b>Total Mix Remaining:</b> ${fmt(b.remaining)} L</div>
+            <div style="margin-top:.5rem;"><b>Chemicals (made of):</b><br>${b.chemicals || "—"}</div>
+            <div style="margin-top:.5rem;"><b>Linked Jobs:</b><br>${jobsHtml}</div>
+            <div class="row gap end" style="margin-top:.8rem;">
+              <button class="pill" data-edit-batch>Edit</button>
+              <button class="pill warn" data-close>Close</button>
+            </div>
+          </div>
+        </div>`;
+      const wrap = document.createElement("div"); wrap.innerHTML = html; document.body.appendChild(wrap.firstChild);
+      const modal = $(".modal");
+      modal?.addEventListener("click", (e)=>{ if (e.target === modal || e.target.dataset.close!=null) modal.remove(); });
+
+      // open job links
+      $$("[data-open-job]", modal).forEach(a=>{
+        a.addEventListener("click", (e)=>{ e.preventDefault(); const t = DB.tasks.find(x=> String(x.id)===a.dataset.openJob); t && showJobPopup(t); });
+      });
+
+      // edit (no duplicate: update in place)
+      $("[data-edit-batch]", modal)?.addEventListener("click", ()=>{
+        const mix = Number(prompt("Total mix (L):", b.mix)) || b.mix;
+        const rem = Number(prompt("Remaining (L):", b.remaining)) || b.remaining;
+        const chems = prompt("Chemicals:", b.chemicals || "") || b.chemicals || "";
+        b.mix = mix; b.remaining = rem; b.chemicals = chems; b.time ||= nowTime();
+        saveDB(); modal.remove(); renderBatches(); populateBatchSelect();
+      });
+    }
+
+    // ---------- Procurement ----------
+    function upsertProcurement(title) {
+      if (!DB.procurement.find(p => p.title === title)) {
+        DB.procurement.push({ id: "P"+Date.now()+Math.random().toString(16).slice(2), title, createdAt: new Date().toISOString(), done:false });
+        saveDB();
+      }
+    }
+
+    // ---------- Inventory ----------
+    $("#addChem")?.addEventListener("click", ()=>{
+      const name = prompt("Chemical name:"); if (!name) return;
+      const active = prompt("Active ingredient (e.g., Glyphosate):") || "";
+      const containerSize = Number(prompt("Container size (numeric, e.g., 20):", "20")) || 0;
+      const containerUnit = prompt("Container unit (L, mL, g):", "L") || "L";
+      const containers = Number(prompt("How many containers:", "0")) || 0;
+      const threshold = Number(prompt("Reorder threshold (containers):", "0")) || 0;
+      DB.chems.push({ name, active, containerSize, containerUnit, containers, threshold });
+      saveDB(); renderChems();
+    });
+
+    function renderChems() {
+      const list = $("#chemList"); if (!list) return; list.innerHTML = "";
+      DB.chems.slice().sort((a,b)=> a.name.localeCompare(b.name)).forEach(c=>{
+        const total = c.containers * (c.containerSize||0);
+        const line = `${c.containers} × ${fmt(c.containerSize)} ${c.containerUnit} • total ${fmt(total)} ${c.containerUnit}`;
+        const card = document.createElement("div");
+        card.className = "item";
+        card.innerHTML =
+          `<b>${c.name}</b><br><small>${line}</small><br><small>Active: ${c.active || "—"}</small>
+           <div class="row gap end" style="margin-top:.4rem;">
+             <button class="pill" data-edit>Edit</button>
+             <button class="pill warn" data-del>Delete</button>
+           </div>`;
+        // low-stock reminder -> procurement
+        if (c.threshold && c.containers < c.threshold) {
+          upsertProcurement(`Low stock: ${c.name}`);
+        }
+
+        card.querySelector("[data-edit]")?.addEventListener("click", ()=>{
+          const active = prompt("Active ingredient:", c.active || "") || c.active || "";
+          const size = Number(prompt("Container size:", c.containerSize)) || c.containerSize || 0;
+          const unit = prompt("Unit (L, mL, g):", c.containerUnit || "L") || c.containerUnit || "L";
+          const count = Number(prompt("How many containers:", c.containers)) || c.containers || 0;
+          const thr = Number(prompt("Reorder threshold (containers):", c.threshold||0)) || (c.threshold||0);
+          c.active = active; c.containerSize = size; c.containerUnit = unit; c.containers = count; c.threshold = thr;
+          saveDB(); renderChems();
+        });
+        card.querySelector("[data-del]")?.addEventListener("click", ()=>{
+          if (!confirm("Delete chemical?")) return;
+          DB.chems = DB.chems.filter(x=> x!==c); saveDB(); renderChems();
+        });
+        list.appendChild(card);
+      });
+    }
+    renderChems();
+    // ---------- Mapping ----------
+    let map;
+    function ensureMap() {
+      if (map) return map;
+      map = L.map("map").setView([-34.75, 148.65], 9);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      return map;
+    }
+
+    $("#mapSearchBtn")?.addEventListener("click", renderMap);
+    $("#mapResetBtn")?.addEventListener("click", ()=>{
+      $("#mapFrom").value=""; $("#mapTo").value=""; $("#mapType").value="All"; renderMap();
+    });
+
+    function renderMap() {
+      const m = ensureMap();
+      // wipe existing layers except tiles
+      m.eachLayer(l => { if (!(l instanceof L.TileLayer)) m.removeLayer(l); });
+
+      const from = $("#mapFrom")?.value || ""; const to = $("#mapTo")?.value || ""; const typ = $("#mapType")?.value || "All";
+      const tasks = DB.tasks.filter(t => !t.archived)
+        .filter(t => (!from || t.date >= from) && (!to || t.date <= to))
+        .filter(t => typ==="All" ? true : t.type === typ);
+
+      tasks.forEach(t=>{
+        // line for road spray track
+        if (t.coords?.length > 1) {
+          L.polyline(t.coords, { color: "yellow", weight: 4, opacity: 0.9 }).addTo(m);
+        }
+        // pin at first coord or a dummy centroid if none
+        const pt = t.coords?.[0] || [-34.75 + Math.random()*0.1, 148.65 + Math.random()*0.1];
+        const popup = `<b>${t.name}</b><br>${t.type} • ${t.date}<br><button id="open_${t.id}" class="pill">Open</button>`;
+        const marker = L.marker(pt).addTo(m).bindPopup(popup);
+        marker.on("popupopen", ()=>{
+          setTimeout(()=>{ const btn = document.getElementById(`open_${t.id}`); btn && (btn.onclick = ()=> showJobPopup(t)); }, 0);
+        });
+      });
+
+      if (tasks.length && tasks[0].coords?.length) m.setView(tasks[0].coords[0], 11);
+    }
+
+    // ---------- Export / Clear ----------
+    $("#exportBtn")?.addEventListener("click", ()=>{
+      const blob = new Blob([JSON.stringify(DB, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a");
+      a.href = url; a.download = "weedtracker_data.json"; a.click();
+    });
+    $("#clearBtn")?.addEventListener("click", ()=>{
+      if (!confirm("Clear ALL local data?")) return;
+      localStorage.removeItem(STORAGE_KEY); DB = ensureDB();
+      renderRecords(); renderBatches(); renderChems(); renderMap();
+    });
+
+    // initial renders
+    renderRecords(); renderBatches(); renderChems();
+
+  }); // DOMContentLoaded end
+})();
