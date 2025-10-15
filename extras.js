@@ -1,38 +1,113 @@
-/* === WeedTracker V56 Light – Extra Utilities === */
+//// StartExtras
+/* === extras.js — WeedTracker V57 Light Final === */
 
-// Date + time formatting helpers
-function formatDate(date) {
-  if (!date) return "—";
-  const d = new Date(date);
-  return d.toISOString().split("T")[0];
-}
-function formatTime(date) {
-  if (!date) return "—";
-  const d = new Date(date);
-  return d.toTimeString().slice(0, 5);
-}
+// Utility helpers for WeedTracker
 
-// Distance between coordinates (for mapping summaries)
-function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371e3;
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2 - lat1) * Math.PI/180;
-  const Δλ = (lon2 - lon1) * Math.PI/180;
-  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
+const Extras = {
+  // Format date/time nicely
+  fmtDate(d) {
+    const dt = new Date(d);
+    return dt.toLocaleDateString() + " " + dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  },
 
-// Simple popup message
-function toast(msg, ms=1500) {
-  const div = document.createElement("div");
-  div.textContent = msg;
-  Object.assign(div.style,{
-    position:"fixed", bottom:"1.5rem", left:"50%", transform:"translateX(-50%)",
-    background:"#cfffcf", color:"#030", padding:".6rem 1.2rem",
-    borderRadius:"20px", boxShadow:"0 2px 6px rgba(0,0,0,.2)", zIndex:9999
-  });
-  document.body.appendChild(div);
-  setTimeout(()=>div.remove(), ms);
-}
+  // Load NSW weed list with Noxious weeds pinned to top
+  loadWeeds() {
+    const select = document.getElementById("weedSelect");
+    if (!select) return;
+    select.innerHTML = "";
+    const noxious = [
+      "African Lovegrass",
+      "Bathurst Burr",
+      "Blackberry",
+      "St John's Wort",
+      "Chilean Needle Grass",
+      "Coolatai Grass",
+      "Serrated Tussock",
+      "Fireweed",
+      "Sweet Briar",
+      "Blue Heliotrope",
+      "Cape Broom"
+    ];
+    const common = [
+      "Patterson's Curse",
+      "Thistle",
+      "Wild Turnip",
+      "Wild Oats",
+      "Dandelion",
+      "Dock",
+      "Fleabane",
+      "Clover",
+      "Burr Medic",
+      "Barley Grass",
+      "Brome Grass",
+      "Onion Weed",
+      "Mustard Weed",
+      "Flatweed",
+      "Marshmallow",
+      "Cudweed",
+      "Catsear",
+      "Melilot",
+      "Milk Thistle"
+    ];
+
+    const sorted = [
+      ...noxious.map(w => ({ name: w, type: "Noxious" })),
+      ...common.map(w => ({ name: w, type: "Common" }))
+    ];
+
+    for (const w of sorted) {
+      const opt = document.createElement("option");
+      opt.textContent = (w.type === "Noxious" ? "⚠ " : "") + w.name;
+      opt.value = w.name;
+      select.appendChild(opt);
+    }
+  },
+
+  // Default chemicals pre-loaded into inventory
+  preloadChems(data) {
+    if (!data.chems || data.chems.length === 0) {
+      data.chems = [
+        { name: "Crucial", qty: "20L", active: "Glyphosate" },
+        { name: "BowSaw", qty: "5L", active: "Triclopyr + Picloram" },
+        { name: "Grazon", qty: "10L", active: "Triclopyr + Picloram" },
+        { name: "Hastings", qty: "5L", active: "MCPA" },
+        { name: "Outright", qty: "5L", active: "Dicamba" },
+        { name: "ProSoil", qty: "2kg", active: "Oxyfluorfen" },
+        { name: "SuperWet", qty: "5L", active: "Alkyl Phenol Ethoxylate" },
+        { name: "Sword 750WG", qty: "2kg", active: "Metsulfuron-Methyl" }
+      ];
+    }
+  },
+
+  // Display a popup with custom content
+  popup(content) {
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    modal.innerHTML = `
+      <div class="card">
+        ${content}
+        <div style="text-align:center;margin-top:0.8rem;">
+          <button class="pill" onclick="this.closest('.modal').remove()">Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  },
+
+  // Quick alert popup for errors/info
+  alert(msg) {
+    this.popup(`<p>${msg}</p>`);
+  },
+
+  // Get filtered tasks
+  filterTasks(data, query) {
+    return data.tasks.filter(t =>
+      (!query || t.name.toLowerCase().includes(query.toLowerCase())) &&
+      (!query || t.weed.toLowerCase().includes(query.toLowerCase()))
+    );
+  }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  Extras.loadWeeds();
+});
+//// EndExtras
