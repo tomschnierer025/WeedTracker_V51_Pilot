@@ -1,42 +1,39 @@
+//// StartIndex
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WeedTracker V56 Light</title>
+  <title>WeedTracker V57 Light Final</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
 
-  <!-- Splash -->
   <div id="splash" class="screen active">
     <div class="center">
-      <h1>🌿 WeedTracker V56 Pilot</h1>
-      <p>Loading...</p>
+      <h1>🌿 WeedTracker</h1>
+      <p>Loading…</p>
     </div>
   </div>
 
-  <!-- Spinner -->
-  <div id="spinner" class="spinner">Loading...</div>
+  <div id="spinner" class="spinner">Loading…</div>
 
-  <!-- Home -->
   <div id="home" class="screen">
-    <h2>🏠 Home</h2>
+    <h2>🌿 WeedTracker</h2>
     <div class="grid buttons">
       <button data-target="createTask" class="tile">🧾 Create Task</button>
       <button data-target="records" class="tile">📚 Records</button>
       <button data-target="batches" class="tile">🧪 Batches</button>
       <button data-target="inventory" class="tile">🧴 Chemical Inventory</button>
-      <button data-target="procurement" class="tile">🛒 Procurement List</button>
       <button data-target="mapping" class="tile">🗺️ Mapping</button>
       <button data-target="settings" class="tile">⚙️ Settings</button>
     </div>
   </div>
 
-  <!-- Create Task -->
   <div id="createTask" class="screen">
-    <button id="homeBtn" class="back">⬅ Home</button>
+    <button class="home-btn back">⬅ Home</button>
     <h2>🧾 Create Task</h2>
 
     <label>Task Type:</label>
@@ -46,16 +43,6 @@
       <option>Road Spray</option>
     </select>
 
-    <label>Job Name:</label>
-    <input id="jobName" placeholder="Auto or manual" />
-    <button id="autoNameBtn" class="pill">Auto-Generate Name</button>
-
-    <label>Council No.:</label>
-    <input id="councilNum" placeholder="Optional" />
-
-    <label>Link to Inspection ID (optional):</label>
-    <input id="linkInspectionId" placeholder="Enter previous inspection ID" />
-
     <div class="group">
       <label>Location:</label>
       <div class="row gap">
@@ -63,6 +50,16 @@
         <span id="locRoad">No location yet</span>
       </div>
     </div>
+
+    <label>Job Name:</label>
+    <input id="jobName" placeholder="Auto or manual" />
+    <button id="autoNameBtn" class="pill">Auto-Generate Name</button>
+
+    <label>Council No. (optional):</label>
+    <input id="councilNum" placeholder="Council job number" />
+
+    <label>Link to Inspection ID (optional):</label>
+    <input id="linkInspectionId" placeholder="Enter previous inspection ID" />
 
     <div class="group">
       <label>Date:</label>
@@ -102,12 +99,13 @@
     <select id="reminderWeeks"></select>
 
     <label>Notes:</label>
-    <textarea id="notes" rows="3"></textarea>
+    <textarea id="notes" rows="3" placeholder="Add notes…"></textarea>
 
     <div class="group">
       <label>Status:</label>
       <label><input type="radio" name="status" value="Incomplete" checked /> Incomplete</label>
       <label><input type="radio" name="status" value="Complete" /> Complete</label>
+      <label><input type="radio" name="status" value="Draft" /> Draft</label>
     </div>
 
     <div class="row gap">
@@ -116,13 +114,12 @@
     </div>
   </div>
 
-  <!-- Records -->
   <div id="records" class="screen">
-    <button id="homeBtn" class="back">⬅ Home</button>
+    <button class="home-btn back">⬅ Home</button>
     <h2>📚 Records</h2>
 
     <div class="filters">
-      <input id="recSearch" placeholder="Search by name, weed, etc." />
+      <input id="recSearch" placeholder="Search name / weed / road…" />
       <input id="recFrom" type="date" />
       <input id="recTo" type="date" />
       <div class="row wrap small">
@@ -142,9 +139,8 @@
     <div id="recordsList" class="list"></div>
   </div>
 
-  <!-- Batches -->
   <div id="batches" class="screen">
-    <button id="homeBtn" class="back">⬅ Home</button>
+    <button class="home-btn back">⬅ Home</button>
     <h2>🧪 Batches</h2>
 
     <div class="filters">
@@ -160,25 +156,15 @@
     <div id="batchList" class="list"></div>
   </div>
 
-  <!-- Inventory -->
   <div id="inventory" class="screen">
-    <button id="homeBtn" class="back">⬅ Home</button>
-    <h2>🧴 Chemical Inventory</h2>
+    <button class="home-btn back">⬅ Home</button>
+    <h2>🧪 Chemical Inventory</h2>
     <button id="addChem" class="pill">➕ Add Chemical</button>
     <div id="chemList" class="list"></div>
   </div>
 
-  <!-- Procurement -->
-  <div id="procurement" class="screen">
-    <button id="homeBtn" class="back">⬅ Home</button>
-    <h2>🛒 Procurement List</h2>
-    <p>Low-stock items from chemicals will appear here automatically.</p>
-    <ul id="procList"></ul>
-  </div>
-
-  <!-- Mapping -->
   <div id="mapping" class="screen">
-    <button id="homeBtn" class="back">⬅ Home</button>
+    <button class="home-btn back">⬅ Home</button>
     <h2>🗺️ Mapping</h2>
 
     <div class="filters">
@@ -196,12 +182,11 @@
       </div>
     </div>
 
-    <div id="map" style="height:70vh;border:1px solid #ccc;margin-top:.5rem;"></div>
+    <div id="map" style="height:70vh;border:1px solid #ccc;margin-top:.5rem;border-radius:8px;"></div>
   </div>
 
-  <!-- Settings -->
   <div id="settings" class="screen">
-    <button id="homeBtn" class="back">⬅ Home</button>
+    <button class="home-btn back">⬅ Home</button>
     <h2>⚙️ Settings</h2>
     <label>Account Email (for future sync):</label>
     <input id="accountEmail" placeholder="your@email.com" />
@@ -210,10 +195,14 @@
     <div class="group">
       <button id="exportBtn" class="pill">⬇ Export Data</button>
       <button id="clearBtn" class="pill warn">🗑 Clear Data</button>
-      <button id="openSDS" class="pill">📄 Open SDS Portal</button>
+      <button id="restoreBtn" class="pill">🔁 Restore Backup</button>
+      <button id="openSDS" class="pill">📄 SDS Portal</button>
     </div>
+
+    <div class="tiny" id="versionInfo">V57 Light Final</div>
   </div>
 
   <script src="apps.js"></script>
 </body>
 </html>
+//// EndIndex
