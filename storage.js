@@ -1,72 +1,55 @@
-//// StartStorage
-/* === storage.js — WeedTracker V57 Light Final === */
+/* === WeedTracker V57 Local Storage Manager === */
 
-const Storage = {
-  KEY: "weedtracker_data_v57",
+(function(){
+  const STORAGE_KEY = "weedtracker_data";
+  const BACKUP_KEY  = "weedtracker_backup";
+  const MAX_BACKUPS = 3;
 
-  load() {
-    try {
-      const raw = localStorage.getItem(this.KEY);
-      if (!raw) return { tasks: [], batches: [], chems: [], procurement: [], settings: {} };
-      return JSON.parse(raw);
-    } catch (e) {
-      console.error("Load failed", e);
-      return { tasks: [], batches: [], chems: [], procurement: [], settings: {} };
+  window.WTStorage = {
+    get() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      } catch {
+        return {};
+      }
+    },
+    save(data) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      this.backup(data);
+    },
+    backup(data) {
+      try {
+        const backups = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
+        backups.unshift({ ts: new Date().toISOString(), data });
+        while (backups.length > MAX_BACKUPS) backups.pop();
+        localStorage.setItem(BACKUP_KEY, JSON.stringify(backups));
+      } catch(e){ console.warn("Backup failed", e); }
+    },
+    restoreLatest() {
+      const stacks = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
+      if (!stacks.length) return null;
+      const latest = stacks[0].data;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(latest));
+      return latest;
+    },
+    clear() {
+      localStorage.removeItem(STORAGE_KEY);
+    },
+    export() {
+      const db = this.get();
+      const blob = new Blob([JSON.stringify(db,null,2)], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "weedtracker_data.json";
+      a.click();
+    },
+    import(jsonStr) {
+      try {
+        const data = JSON.parse(jsonStr);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        return true;
+      } catch { return false; }
     }
-  },
-
-  save(data) {
-    try {
-      localStorage.setItem(this.KEY, JSON.stringify(data));
-    } catch (e) {
-      console.error("Save failed", e);
-    }
-  },
-
-  clear() {
-    localStorage.removeItem(this.KEY);
-  },
-
-  export(data) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "weedtracker_backup.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  },
-
-  async import(file, callback) {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      this.save(parsed);
-      if (callback) callback(parsed);
-      alert("Backup restored successfully.");
-    } catch (err) {
-      alert("Failed to restore backup: " + err.message);
-    }
-  },
-};
-
-// === Hooks ===
-document.addEventListener("DOMContentLoaded", () => {
-  const restoreBtn = document.getElementById("restoreBtn");
-  if (restoreBtn) {
-    restoreBtn.onclick = () => {
-      const inp = document.createElement("input");
-      inp.type = "file";
-      inp.accept = ".json";
-      inp.onchange = () => {
-        const file = inp.files[0];
-        if (file) Storage.import(file, data => {
-          localStorage.setItem(Storage.KEY, JSON.stringify(data));
-          location.reload();
-        });
-      };
-      inp.click();
-    };
-  }
-});
-//// EndStorage
+  };
+})();
