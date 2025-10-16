@@ -1,12 +1,13 @@
-//// StartApps
 /* === WeedTracker V57 Light Final – Complete Build === */
 document.addEventListener("DOMContentLoaded", () => {
+  // ---------- helpers ----------
   const $ = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => [...r.querySelectorAll(s)];
   const today = () => new Date().toISOString().slice(0,10);
   const nowTime = () => new Date().toTimeString().slice(0,5);
   const fmt = (n,d=0)=> (n==null||n==="")?"–":Number(n).toFixed(d);
 
+  // ---------- storage & seeds ----------
   const STORAGE_KEY = "weedtracker_data";
   const BACKUP_KEY  = "weedtracker_backup";
   const MAX_BACKUPS = 3;
@@ -48,6 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(latest));
     return latest;
   }
+
   function ensureDB() {
     let db;
     try { db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
@@ -64,62 +66,72 @@ document.addEventListener("DOMContentLoaded", () => {
     return db;
   }
   let DB = ensureDB();
+
+  // Offer restore if empty but backup exists
   if ((!DB.tasks.length && !DB.batches.length && !DB.chems.length) && localStorage.getItem(BACKUP_KEY)){
     if (confirm("Previous backup found. Restore data now?")) {
       const r = restoreLatest();
       if (r){ DB = r; }
     }
   }
+
   const saveDB = (doBackup=true) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
     if (doBackup) backupDB(DB);
   };
 
-  const screens = [...document.querySelectorAll(".screen")];
+  // ---------- nav ----------
+  const screens = $$(".screen");
   function switchScreen(id) {
     screens.forEach(s => s.classList.remove("active"));
-    const tgt = document.getElementById(id); if (tgt) tgt.classList.add("active");
+    $("#"+id)?.classList.add("active");
     if (id === "records") renderRecords();
     if (id === "batches") renderBatches();
     if (id === "inventory") renderChems();
     if (id === "mapping") renderMap();
   }
-  document.querySelectorAll("[data-target]").forEach(btn => btn.addEventListener("click", ()=> switchScreen(btn.dataset.target)));
-  document.querySelectorAll(".home-btn").forEach(b => b.addEventListener("click", (e)=>{ e.preventDefault(); e.stopPropagation(); switchScreen("home"); }));
-  setTimeout(()=>{ const s=document.getElementById("splash"); s && s.remove(); switchScreen("home"); }, 700);
+  $$("[data-target]").forEach(btn => btn.addEventListener("click", ()=> switchScreen(btn.dataset.target)));
+  $$(".home-btn").forEach(b => b.addEventListener("click", (e)=>{ e.preventDefault(); e.stopPropagation(); switchScreen("home"); }));
 
-  const spinner = document.getElementById("spinner");
+  setTimeout(()=>{ $("#splash")?.remove(); switchScreen("home"); }, 700);
+
+  // ---------- spinner ----------
+  const spinner = $("#spinner");
   const spin = (on)=> spinner?.classList[on?"add":"remove"]("active");
 
-  const accountInput = document.getElementById("accountEmail");
-  if (accountInput) accountInput.value = DB.accountEmail || "";
-  document.getElementById("saveAccount")?.addEventListener("click", ()=>{ DB.accountEmail = accountInput.value.trim(); saveDB(); toast("Saved"); });
-  document.getElementById("exportBtn")?.addEventListener("click", ()=>{
+  // ---------- settings ----------
+  const accountInput = $("#accountEmail");
+  accountInput && (accountInput.value = DB.accountEmail || "");
+  $("#saveAccount")?.addEventListener("click", ()=>{ DB.accountEmail = accountInput.value.trim(); saveDB(); toast("Saved"); });
+  $("#exportBtn")?.addEventListener("click", ()=>{
     const blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="weedtracker_data.json"; a.click();
   });
-  document.getElementById("clearBtn")?.addEventListener("click", ()=>{
+  $("#clearBtn")?.addEventListener("click", ()=>{
     if (!confirm("Clear ALL local data?")) return;
     localStorage.removeItem(STORAGE_KEY);
     DB = ensureDB();
     renderRecords(); renderBatches(); renderChems(); renderMap();
   });
-  document.getElementById("restoreBtn")?.addEventListener("click", ()=>{
+  $("#restoreBtn")?.addEventListener("click", ()=>{
     const r = restoreLatest();
     if (r){ DB = r; renderRecords(); renderBatches(); renderChems(); renderMap(); toast("Restored from backup"); }
     else toast("No backup found");
   });
 
-  const remSel = document.getElementById("reminderWeeks");
+  // ---------- reminder 1–52 ----------
+  const remSel = $("#reminderWeeks");
   if (remSel && !remSel.options.length) for (let i=1;i<=52;i++){ const o=document.createElement("option"); o.value=o.textContent=i; remSel.appendChild(o); }
 
-  const taskTypeSel = document.getElementById("taskType");
-  const roadTrackBlock = document.getElementById("roadTrackBlock");
+  // ---------- create task ----------
+  const taskTypeSel = $("#taskType");
+  const roadTrackBlock = $("#roadTrackBlock");
   const syncTrackVis = ()=> roadTrackBlock.style.display = (taskTypeSel.value === "Road Spray") ? "block" : "none";
   taskTypeSel?.addEventListener("change", syncTrackVis); syncTrackVis();
 
-  const locateBtn = document.getElementById("locateBtn");
-  const locRoad = document.getElementById("locRoad");
+  // location then auto-name
+  const locateBtn = $("#locateBtn");
+  const locRoad = $("#locRoad");
   let currentRoad = "";
   locateBtn?.addEventListener("click", ()=>{
     spin(true);
@@ -134,32 +146,35 @@ document.addEventListener("DOMContentLoaded", () => {
       locRoad.textContent = currentRoad; spin(false);
     }, ()=>{ spin(false); toast("GPS failed"); });
   });
-  document.getElementById("autoNameBtn")?.addEventListener("click", ()=>{
-    const t = document.getElementById("taskType").value;
-    const prefix = (t||"Task").split(" ").map(w=>w[0]).join("").toUpperCase();
+
+  $("#autoNameBtn")?.addEventListener("click", ()=>{
+    const t = $("#taskType").value;
+    const prefix = (t||"Task").split(" ").map(w=>w[0]).join("").toUpperCase(); // I / S / RS
     const date = today().replaceAll("-","");
     const base = currentRoad || "Unknown";
-    document.getElementById("jobName").value = `${prefix}${date}_${base.replace(/\s+/g,"")}`;
+    $("#jobName").value = `${prefix}${date}_${base.replace(/\s+/g,"")}`;
   });
 
-  document.getElementById("autoWeatherBtn")?.addEventListener("click", ()=>{
+  // weather incl humidity
+  $("#autoWeatherBtn")?.addEventListener("click", ()=>{
     if (!navigator.geolocation){ toast("Enable location services"); return; }
     navigator.geolocation.getCurrentPosition(async pos=>{
       try{
         const { latitude, longitude } = pos.coords;
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`;
         const r = await fetch(url); const j = await r.json(); const c = j.current || {};
-        document.getElementById("temp").value = c.temperature_2m ?? "";
-        document.getElementById("wind").value = c.wind_speed_10m ?? "";
-        document.getElementById("windDir").value = (c.wind_direction_10m ?? "") + (c.wind_direction_10m!=null?"°":"");
-        document.getElementById("humidity").value = c.relative_humidity_2m ?? "";
-        document.getElementById("wxUpdated").textContent = "Updated @ " + nowTime();
+        $("#temp").value = c.temperature_2m ?? "";
+        $("#wind").value = c.wind_speed_10m ?? "";
+        $("#windDir").value = (c.wind_direction_10m ?? "") + (c.wind_direction_10m!=null?"°":"");
+        $("#humidity").value = c.relative_humidity_2m ?? "";
+        $("#wxUpdated").textContent = "Updated @ " + nowTime();
       }catch(e){ console.warn(e); toast("Weather unavailable"); }
     }, ()=> toast("Location not available"));
   });
 
+  // weeds select (noxious first)
   function populateWeeds(){
-    const sel = document.getElementById("weedSelect"); if (!sel) return;
+    const sel = $("#weedSelect"); if (!sel) return;
     sel.innerHTML = "";
     const nox = DB.weeds.filter(w=>/noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
     const rest = DB.weeds.filter(w=>! /noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
@@ -172,8 +187,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   populateWeeds();
+
+  // batch select
   function populateBatchSelect(){
-    const sel=document.getElementById("batchSelect"); if (!sel) return;
+    const sel=$("#batchSelect"); if (!sel) return;
     sel.innerHTML=""; const def=document.createElement("option"); def.value=""; def.textContent="— Select Batch —"; sel.appendChild(def);
     DB.batches.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(b=>{
       const o=document.createElement("option");
@@ -183,47 +200,53 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   populateBatchSelect();
 
+  // roadside tracking
   let tracking=false, trackTimer=null, trackCoords=[];
-  document.getElementById("startTrack")?.addEventListener("click", ()=>{
-    trackCoords=[]; tracking=true; document.getElementById("trackStatus").textContent="Tracking…";
+  $("#startTrack")?.addEventListener("click", ()=>{
+    trackCoords=[]; tracking=true; $("#trackStatus").textContent="Tracking…";
     if (trackTimer) clearInterval(trackTimer);
     if (!navigator.geolocation){ toast("Enable location"); return; }
     trackTimer = setInterval(()=> navigator.geolocation.getCurrentPosition(p=> trackCoords.push([p.coords.latitude,p.coords.longitude])), 5000);
   });
-  document.getElementById("stopTrack")?.addEventListener("click", ()=>{
+  $("#stopTrack")?.addEventListener("click", ()=>{
     tracking=false; if (trackTimer) clearInterval(trackTimer);
-    document.getElementById("trackStatus").textContent=`Stopped (${trackCoords.length} pts)`;
+    $("#trackStatus").textContent=`Stopped (${trackCoords.length} pts)`;
     localStorage.setItem("lastTrack", JSON.stringify(trackCoords));
   });
 
-  document.getElementById("saveTask")?.addEventListener("click", ()=> saveTask(false));
-  document.getElementById("saveDraft")?.addEventListener("click", ()=> saveTask(true));
+  // save task
+  $("#saveTask")?.addEventListener("click", ()=> saveTask(false));
+  $("#saveDraft")?.addEventListener("click", ()=> saveTask(true));
   function saveTask(isDraft){
     spin(true);
     const id=Date.now();
-    const status=isDraft?"Draft":(document.querySelector("input[name='status']:checked")?.value||"Incomplete");
+    const status=isDraft?"Draft":($("input[name='status']:checked")?.value||"Incomplete");
     const obj={
       id,
-      name: document.getElementById("jobName").value.trim() || ("Task_"+id),
-      council: document.getElementById("councilNum").value.trim(),
-      linkedInspectionId: document.getElementById("linkInspectionId").value.trim(),
-      type: document.getElementById("taskType").value,
-      weed: document.getElementById("weedSelect").value,
-      batch: document.getElementById("batchSelect").value,
-      date: document.getElementById("jobDate").value || today(),
-      start: document.getElementById("startTime").value || "",
-      end: document.getElementById("endTime").value || "",
-      temp: document.getElementById("temp").value, wind: document.getElementById("wind").value, windDir: document.getElementById("windDir").value, humidity: document.getElementById("humidity").value,
-      reminder: document.getElementById("reminderWeeks").value || "",
-      status, notes: document.getElementById("notes").value || "",
+      name: $("#jobName").value.trim() || ("Task_"+id),
+      council: $("#councilNum").value.trim(),
+      linkedInspectionId: $("#linkInspectionId").value.trim(),
+      type: $("#taskType").value,
+      weed: $("#weedSelect").value,
+      batch: $("#batchSelect").value,
+      date: $("#jobDate").value || today(),
+      start: $("#startTime").value || "",
+      end: $("#endTime").value || "",
+      temp: $("#temp").value, wind: $("#wind").value, windDir: $("#windDir").value, humidity: $("#humidity").value,
+      reminder: $("#reminderWeeks").value || "",
+      status, notes: $("#notes").value || "",
       coords: trackCoords.slice(), createdAt:new Date().toISOString(), archived:false
     };
     const existing = DB.tasks.find(t=> t.name===obj.name);
     if (existing) Object.assign(existing, obj); else DB.tasks.push(obj);
+
+    // link & archive inspection if provided
     if (obj.linkedInspectionId){
       const insp = DB.tasks.find(t=> t.type==="Inspection" && (String(t.id)===obj.linkedInspectionId || t.name===obj.linkedInspectionId));
       if (insp){ insp.archived=true; insp.status="Archived"; obj.linkedInspectionResolved=true; }
     }
+
+    // consume batch (simple heuristic)
     if (obj.batch){
       const b = DB.batches.find(x=>x.id===obj.batch);
       if (b){
@@ -232,16 +255,19 @@ document.addEventListener("DOMContentLoaded", () => {
         b.remaining = Math.max(0, (Number(b.mix)||0) - (b.used||0));
       }
     }
+
     saveDB(); populateBatchSelect(); renderRecords(); renderMap();
     spin(false); toast("Saved");
   }
 
-  document.getElementById("recSearchBtn")?.addEventListener("click", renderRecords);
-  document.getElementById("recResetBtn")?.addEventListener("click", ()=>{
-    document.getElementById("recSearch").value=""; document.getElementById("recFrom").value=""; document.getElementById("recTo").value="";
-    ["fInspection","fSpot","fRoad","fComplete","fIncomplete","fDraft"].forEach(id=>{document.getElementById(id).checked=true;});
+  // records
+  $("#recSearchBtn")?.addEventListener("click", renderRecords);
+  $("#recResetBtn")?.addEventListener("click", ()=>{
+    $("#recSearch").value=""; $("#recFrom").value=""; $("#recTo").value="";
+    ["fInspection","fSpot","fRoad","fComplete","fIncomplete","fDraft"].forEach(id=>{$("#"+id).checked=true;});
     renderRecords();
   });
+
   function recordMatches(t,q,from,to,types,statuses){
     if (t.archived) return false;
     if (from && (t.date||"")<from) return false;
@@ -254,10 +280,10 @@ document.addEventListener("DOMContentLoaded", () => {
     return statusOK;
   }
   function renderRecords(){
-    const list=document.getElementById("recordsList"); if (!list) return; list.innerHTML="";
-    const q=document.getElementById("recSearch").value.trim(); const from=document.getElementById("recFrom").value; const to=document.getElementById("recTo").value;
-    const types={inspection:document.getElementById("fInspection").checked, spot:document.getElementById("fSpot").checked, road:document.getElementById("fRoad").checked};
-    const statuses={complete:document.getElementById("fComplete").checked, incomplete:document.getElementById("fIncomplete").checked, draft:document.getElementById("fDraft").checked};
+    const list=$("#recordsList"); if (!list) return; list.innerHTML="";
+    const q=$("#recSearch").value.trim(); const from=$("#recFrom").value; const to=$("#recTo").value;
+    const types={inspection:$("#fInspection").checked, spot:$("#fSpot").checked, road:$("#fRoad").checked};
+    const statuses={complete:$("#fComplete").checked, incomplete:$("#fIncomplete").checked, draft:$("#fDraft").checked};
     DB.tasks.filter(t=>recordMatches(t,q,from,to,types,statuses))
       .sort((a,b)=>(b.date||"").localeCompare(a.date||""))
       .forEach(t=>{
@@ -292,32 +318,36 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       </div>`;
     const w=document.createElement("div"); w.innerHTML=html; document.body.appendChild(w.firstChild);
-    const modal=document.querySelector(".modal");
+    const modal=$(".modal");
     modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
-    document.querySelector("[data-open-batch]")?.addEventListener("click",(e)=>{ e.preventDefault(); const b=DB.batches.find(x=>x.id===t.batch); b && showBatchPopup(b); });
-    document.querySelector("[data-open-insp]")?.addEventListener("click",(e)=>{ e.preventDefault(); const insp=DB.tasks.find(x=>x.type==="Inspection"&&(String(x.id)===t.linkedInspectionId||x.name===t.linkedInspectionId)); insp && showJobPopup(insp); });
-    document.querySelector("[data-edit]")?.addEventListener("click",()=>{
+
+    $("[data-open-batch]",modal)?.addEventListener("click",(e)=>{ e.preventDefault(); const b=DB.batches.find(x=>x.id===t.batch); b && showBatchPopup(b); });
+    $("[data-open-insp]",modal)?.addEventListener("click",(e)=>{ e.preventDefault(); const insp=DB.tasks.find(x=>x.type==="Inspection"&&(String(x.id)===t.linkedInspectionId||x.name===t.linkedInspectionId)); insp && showJobPopup(insp); });
+
+    $("[data-edit]",modal)?.addEventListener("click",()=>{
       switchScreen("createTask");
-      document.getElementById("jobName").value=t.name; document.getElementById("councilNum").value=t.council||""; document.getElementById("linkInspectionId").value=t.linkedInspectionId||"";
-      document.getElementById("taskType").value=t.type; document.getElementById("taskType").dispatchEvent(new Event("change"));
-      document.getElementById("weedSelect").value=t.weed||""; document.getElementById("batchSelect").value=t.batch||"";
-      document.getElementById("jobDate").value=t.date||today(); document.getElementById("startTime").value=t.start||""; document.getElementById("endTime").value=t.end||"";
-      document.getElementById("temp").value=t.temp||""; document.getElementById("wind").value=t.wind||""; document.getElementById("windDir").value=t.windDir||""; document.getElementById("humidity").value=t.humidity||"";
-      document.getElementById("notes").value=t.notes||""; modal.remove();
+      $("#jobName").value=t.name; $("#councilNum").value=t.council||""; $("#linkInspectionId").value=t.linkedInspectionId||"";
+      $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
+      $("#weedSelect").value=t.weed||""; $("#batchSelect").value=t.batch||"";
+      $("#jobDate").value=t.date||today(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
+      $("#temp").value=t.temp||""; $("#wind").value=t.wind||""; $("#windDir").value=t.windDir||""; $("#humidity").value=t.humidity||"";
+      $("#notes").value=t.notes||""; modal.remove();
     });
   }
 
-  document.getElementById("batSearchBtn")?.addEventListener("click", renderBatches);
-  document.getElementById("batResetBtn")?.addEventListener("click", ()=>{ document.getElementById("batFrom").value=""; document.getElementById("batTo").value=""; renderBatches(); });
-  document.getElementById("newBatch")?.addEventListener("click", ()=>{
+  // batches
+  $("#batSearchBtn")?.addEventListener("click", renderBatches);
+  $("#batResetBtn")?.addEventListener("click", ()=>{ $("#batFrom").value=""; $("#batTo").value=""; renderBatches(); });
+  $("#newBatch")?.addEventListener("click", ()=>{
     const id="B"+Date.now(); const mix=Number(prompt("Total mix (L):","600"))||0;
     const chemicals=prompt("Chemicals (e.g. 'Crucial 1.5L/100L, Wetter 300mL/100L'):","")||"";
     const obj={id, date:today(), time:nowTime(), mix, remaining:mix, used:0, chemicals};
     DB.batches.push(obj); saveDB(); populateBatchSelect(); renderBatches();
   });
+
   function renderBatches(){
-    const list=document.getElementById("batchList"); if(!list) return; list.innerHTML="";
-    const from=document.getElementById("batFrom").value||""; const to=document.getElementById("batTo").value||"";
+    const list=$("#batchList"); if(!list) return; list.innerHTML="";
+    const from=$("#batFrom").value||""; const to=$("#batTo").value||"";
     DB.batches.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to))
       .sort((a,b)=>(b.date||"").localeCompare(a.date||""))
       .forEach(b=>{
@@ -329,6 +359,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
   renderBatches();
+
   function showBatchPopup(b){
     const jobs=DB.tasks.filter(t=>t.batch===b.id);
     const jobsHtml= jobs.length ? `<ul>${jobs.map(t=>`<li><a href="#" data-open-job="${t.id}">${t.name}</a></li>`).join("")}</ul>` : "—";
@@ -348,10 +379,10 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       </div>`;
     const w=document.createElement("div"); w.innerHTML=html; document.body.appendChild(w.firstChild);
-    const modal=document.querySelector(".modal");
+    const modal=$(".modal");
     modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
-    document.querySelectorAll("[data-open-job]").forEach(a=> a.addEventListener("click",(e)=>{ e.preventDefault(); const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob); t && showJobPopup(t); }));
-    document.querySelector("[data-edit-batch]")?.addEventListener("click",()=>{
+    $$("[data-open-job]",modal).forEach(a=> a.addEventListener("click",(e)=>{ e.preventDefault(); const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob); t && showJobPopup(t); }));
+    $("[data-edit-batch]",modal)?.addEventListener("click",()=>{
       const mix=Number(prompt("Total mix (L):",b.mix))||b.mix;
       const rem=Number(prompt("Remaining (L):",b.remaining))||b.remaining;
       const chems=prompt("Chemicals:",b.chemicals||"")||b.chemicals||"";
@@ -360,7 +391,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  document.getElementById("addChem")?.addEventListener("click", ()=>{
+  // inventory (with full-screen editor support)
+  $("#addChem")?.addEventListener("click", ()=>{
     const name=prompt("Chemical name:"); if (!name) return;
     const active=prompt("Active ingredient:", "")||"";
     const size=Number(prompt("Container size (number):","20"))||0;
@@ -368,16 +400,46 @@ document.addEventListener("DOMContentLoaded", () => {
     const count=Number(prompt("How many containers:","0"))||0;
     const thr=Number(prompt("Reorder threshold (containers):","0"))||0;
     DB.chems.push({name,active,containerSize:size,containerUnit:unit,containers:count,threshold:thr});
-    saveDB(); renderChems();
+    saveDB(); renderChems(); renderProcurement();
   });
+
   function upsertProcurement(title){
     if (!DB.procurement.find(p=>p.title===title)){
       DB.procurement.push({id:"P"+Date.now()+Math.random().toString(16).slice(2), title, createdAt:new Date().toISOString(), done:false});
       saveDB();
     }
   }
+
+  // Full-screen chemical editor support
+  let _chemEditing = null;
+  function openChemEditor(c) {
+    _chemEditing = c;
+    $("#ce_name").value = c.name || "";
+    $("#ce_active").value = c.active || "";
+    $("#ce_size").value = c.containerSize || 0;
+    $("#ce_unit").value = c.containerUnit || "L";
+    $("#ce_count").value = c.containers || 0;
+    $("#ce_threshold").value = c.threshold || 0;
+    $("#chemEditSheet").style.display = "block";
+  }
+  function closeChemEditor() {
+    $("#chemEditSheet").style.display = "none";
+    _chemEditing = null;
+  }
+  $("#ce_cancel")?.addEventListener("click", closeChemEditor);
+  $("#ce_save")?.addEventListener("click", ()=>{
+    if (!_chemEditing) return;
+    _chemEditing.name = $("#ce_name").value.trim();
+    _chemEditing.active = $("#ce_active").value.trim();
+    _chemEditing.containerSize = Number($("#ce_size").value) || 0;
+    _chemEditing.containerUnit = $("#ce_unit").value || "L";
+    _chemEditing.containers = Number($("#ce_count").value) || 0;
+    _chemEditing.threshold = Number($("#ce_threshold").value) || 0;
+    saveDB(); renderChems(); renderProcurement(); closeChemEditor(); toast("Chemical updated");
+  });
+
   function renderChems(){
-    const list=document.getElementById("chemList"); if(!list) return; list.innerHTML="";
+    const list=$("#chemList"); if(!list) return; list.innerHTML="";
     DB.chems.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{
       const total = (c.containers||0) * (c.containerSize||0);
       const line = `${c.containers} × ${fmt(c.containerSize)} ${c.containerUnit} • total ${fmt(total)} ${c.containerUnit}`;
@@ -388,24 +450,28 @@ document.addEventListener("DOMContentLoaded", () => {
           <button class="pill warn" data-del>Delete</button>
         </div>`;
       if (c.threshold && c.containers < c.threshold) upsertProcurement(`Low stock: ${c.name}`);
-      card.querySelector("[data-edit]")?.addEventListener("click", ()=>{
-        const active=prompt("Active ingredient:", c.active||"")||c.active||"";
-        const size=Number(prompt("Container size:", c.containerSize))||c.containerSize||0;
-        const unit=prompt("Unit (L, mL, g):", c.containerUnit||"L")||c.containerUnit||"L";
-        const count=Number(prompt("How many containers:", c.containers))||c.containers||0;
-        const thr=Number(prompt("Reorder threshold (containers):", c.threshold||0))||c.threshold||0;
-        c.active=active; c.containerSize=size; c.containerUnit=unit; c.containers=count; c.threshold=thr;
-        saveDB(); renderChems();
-      });
-      card.querySelector("[data-del]")?.addEventListener("click", ()=>{
-        if (!confirm("Delete chemical?")) return;
-        DB.chems = DB.chems.filter(x=>x!==c); saveDB(); renderChems();
-      });
+      card.querySelector("[data-edit]")?.addEventListener("click", ()=> openChemEditor(c));
+      card.querySelector("[data-del]")?.addEventListener("click", ()=>{ if (!confirm("Delete chemical?")) return; DB.chems = DB.chems.filter(x=>x!==c); saveDB(); renderChems(); renderProcurement(); });
       list.appendChild(card);
     });
   }
   renderChems();
 
+  function renderProcurement(){
+    const ul = $("#procList");
+    if (!ul) return;
+    ul.innerHTML = "";
+    DB.chems.forEach(c=>{
+      if (c.threshold && (c.containers||0) < c.threshold){
+        const li = document.createElement("li");
+        li.textContent = `Low stock: ${c.name} (${c.containers||0} < ${c.threshold})`;
+        ul.appendChild(li);
+      }
+    });
+  }
+  renderProcurement();
+
+  // mapping (weed filter enabled)
   let map;
   function ensureMap(){
     if (map) return map;
@@ -413,13 +479,24 @@ document.addEventListener("DOMContentLoaded", () => {
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
     return map;
   }
-  document.getElementById("mapSearchBtn")?.addEventListener("click", renderMap);
-  document.getElementById("mapResetBtn")?.addEventListener("click", ()=>{ document.getElementById("mapFrom").value=""; document.getElementById("mapTo").value=""; document.getElementById("mapType").value="All"; renderMap(); });
+  $("#mapSearchBtn")?.addEventListener("click", renderMap);
+  $("#mapResetBtn")?.addEventListener("click", ()=>{
+    $("#mapFrom").value=""; $("#mapTo").value=""; $("#mapWeed").value=""; $("#mapType").value="All"; renderMap();
+  });
+
   function renderMap(){
     const m=ensureMap();
     m.eachLayer(l=>{ if (!(l instanceof L.TileLayer)) m.removeLayer(l); });
-    const from=document.getElementById("mapFrom").value||""; const to=document.getElementById("mapTo").value||""; const typ=document.getElementById("mapType").value||"All";
-    const tasks=DB.tasks.filter(t=>!t.archived).filter(t=>(!from||t.date>=from)&&(!to||t.date<=to)).filter(t=> typ==="All"?true:t.type===typ);
+
+    const from=$("#mapFrom").value||""; const to=$("#mapTo").value||""; const typ=$("#mapType").value||"All";
+    const weedQ = ($("#mapWeed")?.value || "").trim().toLowerCase();
+
+    const tasks=DB.tasks
+      .filter(t=>!t.archived)
+      .filter(t=>(!from||t.date>=from)&&(!to||t.date<=to))
+      .filter(t=> typ==="All"?true:t.type===typ)
+      .filter(t=> weedQ ? (String(t.weed||"").toLowerCase().includes(weedQ)) : true);
+
     tasks.forEach(t=>{
       if (t.coords?.length>1) L.polyline(t.coords,{color:"yellow",weight:4,opacity:.9}).addTo(m);
       const pt = t.coords?.[0] || [-34.75 + Math.random()*0.1, 148.65 + Math.random()*0.1];
@@ -430,6 +507,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (tasks.length && tasks[0].coords?.length) m.setView(tasks[0].coords[0], 12);
   }
 
+  // toast
   function toast(msg, ms=1500){
     const d=document.createElement("div");
     d.textContent=msg;
@@ -437,4 +515,3 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.appendChild(d); setTimeout(()=>d.remove(), ms);
   }
 });
-//// EndApps
