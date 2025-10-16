@@ -1,4 +1,4 @@
-/* === WeedTracker V57 Light Final – Complete Build === */
+/* === WeedTracker V59 Pilot — Full Build (buttons & popups fixed, light gray bg) === */
 document.addEventListener("DOMContentLoaded", () => {
   // ---------- helpers ----------
   const $ = (s, r=document) => r.querySelector(s);
@@ -6,6 +6,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const today = () => new Date().toISOString().slice(0,10);
   const nowTime = () => new Date().toTimeString().slice(0,5);
   const fmt = (n,d=0)=> (n==null||n==="")?"–":Number(n).toFixed(d);
+  const useStore = !!window.WTStorage;
+  const getDB = () => useStore ? (WTStorage.get()||{}) : JSON.parse(localStorage.getItem("weedtracker_data")||"{}");
+  const setDB = (db, backup=true) => useStore ? WTStorage.save(db) : (localStorage.setItem("weedtracker_data", JSON.stringify(db)), backup&&backupDB(db));
 
   // ---------- storage & seeds ----------
   const STORAGE_KEY = "weedtracker_data";
@@ -25,7 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const DEFAULT_CHEMS = [
     {name:"Crucial", active:"Glyphosate 540 g/L", containerSize:20, containerUnit:"L", containers:4, threshold:2},
-    {name:"Wetter (adjuvant)", active:"Non-ionic surfactant", containerSize:20, containerUnit:"L", containers:1, threshold:1},
+    {name:"SuperWet", active:"Non-ionic surfactant", containerSize:20, containerUnit:"L", containers:1, threshold:1},
     {name:"Bow Saw 600", active:"Triclopyr 600 g/L", containerSize:1, containerUnit:"L", containers:2, threshold:1},
     {name:"Clethodim", active:"Clethodim 240 g/L", containerSize:20, containerUnit:"L", containers:1, threshold:1},
     {name:"Grazon", active:"Triclopyr + Picloram", containerSize:20, containerUnit:"L", containers:1, threshold:1},
@@ -52,9 +55,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function ensureDB() {
     let db;
-    try { db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
-    catch { db = {}; }
-    db.version ??= 57;
+    try { db = getDB(); } catch { db = {}; }
+    db.version ??= 59;
     db.accountEmail ??= "";
     db.tasks ??= [];
     db.batches ??= [];
@@ -62,23 +64,25 @@ document.addEventListener("DOMContentLoaded", () => {
     db.procurement ??= [];
     db.weeds ??= NSW_WEEDS_40.slice();
     if (!db.chems.length) db.chems = DEFAULT_CHEMS.slice();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    setDB(db,false);
     return db;
   }
   let DB = ensureDB();
 
-  // Offer restore if empty but backup exists
+  // Splash fade & remove (prevents overlay blocking clicks)
+  const splash = $("#splash");
+  setTimeout(()=> splash?.classList.add("hide"), 1200);
+  splash?.addEventListener("transitionend", ()=> splash.remove(), {once:true});
+
+  // If empty and backups exist, offer restore
   if ((!DB.tasks.length && !DB.batches.length && !DB.chems.length) && localStorage.getItem(BACKUP_KEY)){
-    if (confirm("Previous backup found. Restore data now?")) {
+    if (confirm("Backup found. Restore data now?")) {
       const r = restoreLatest();
       if (r){ DB = r; }
     }
   }
 
-  const saveDB = (doBackup=true) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
-    if (doBackup) backupDB(DB);
-  };
+  const saveDB = (backup=true) => setDB(DB, backup);
 
   // ---------- nav ----------
   const screens = $$(".screen");
@@ -88,12 +92,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (id === "records") renderRecords();
     if (id === "batches") renderBatches();
     if (id === "inventory") renderChems();
-    if (id === "mapping") renderMap();
+    if (id === "mapping") renderMap(true);
   }
   $$("[data-target]").forEach(btn => btn.addEventListener("click", ()=> switchScreen(btn.dataset.target)));
   $$(".home-btn").forEach(b => b.addEventListener("click", (e)=>{ e.preventDefault(); e.stopPropagation(); switchScreen("home"); }));
-
-  setTimeout(()=>{ $("#splash")?.remove(); switchScreen("home"); }, 700);
 
   // ---------- spinner ----------
   const spinner = $("#spinner");
@@ -115,7 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("#restoreBtn")?.addEventListener("click", ()=>{
     const r = restoreLatest();
-    if (r){ DB = r; renderRecords(); renderBatches(); renderChems(); renderMap(); toast("Restored from backup"); }
+    if (r){ DB = r; renderRecords(); renderBatches(); renderChems(); renderMap(); toast("Restored"); }
     else toast("No backup found");
   });
 
@@ -135,7 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentRoad = "";
   locateBtn?.addEventListener("click", ()=>{
     spin(true);
-    if (!navigator.geolocation){ spin(false); toast("Enable location services"); return; }
+    if (!navigator.geolocation){ spin(false); toast("Enable location"); return; }
     navigator.geolocation.getCurrentPosition(async pos=>{
       const {latitude:lat, longitude:lon} = pos.coords;
       try{
@@ -182,7 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
     all.forEach(w=>{
       const o=document.createElement("option");
       o.value = w==="— Select Weed —" ? "" : w;
-      o.textContent = w;
+      o.textContent = /noxious/i.test(w) ? ("⚠ " + w) : w;
       sel.appendChild(o);
     });
   }
@@ -214,6 +216,16 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.setItem("lastTrack", JSON.stringify(trackCoords));
   });
 
+  // photo upload (DataURL)
+  let photoDataURL = "";
+  $("#photoInput")?.addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { photoDataURL = String(reader.result||""); $("#photoPreview").src = photoDataURL; $("#photoPreview").style.display="block"; };
+    reader.readAsDataURL(f);
+  });
+
   // save task
   $("#saveTask")?.addEventListener("click", ()=> saveTask(false));
   $("#saveDraft")?.addEventListener("click", ()=> saveTask(true));
@@ -235,7 +247,9 @@ document.addEventListener("DOMContentLoaded", () => {
       temp: $("#temp").value, wind: $("#wind").value, windDir: $("#windDir").value, humidity: $("#humidity").value,
       reminder: $("#reminderWeeks").value || "",
       status, notes: $("#notes").value || "",
-      coords: trackCoords.slice(), createdAt:new Date().toISOString(), archived:false
+      coords: trackCoords.slice(),
+      photo: photoDataURL || "",
+      createdAt:new Date().toISOString(), archived:false
     };
     const existing = DB.tasks.find(t=> t.name===obj.name);
     if (existing) Object.assign(existing, obj); else DB.tasks.push(obj);
@@ -264,7 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#recSearchBtn")?.addEventListener("click", renderRecords);
   $("#recResetBtn")?.addEventListener("click", ()=>{
     $("#recSearch").value=""; $("#recFrom").value=""; $("#recTo").value="";
-    ["fInspection","fSpot","fRoad","fComplete","fIncomplete","fDraft"].forEach(id=>{$("#"+id).checked=true;});
+    ["fInspection","fSpot","fRoad","fComplete","fIncomplete","fDraft"].forEach(id=>{$("#"+id).checked=false;}); // start empty
     renderRecords();
   });
 
@@ -273,10 +287,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (from && (t.date||"")<from) return false;
     if (to && (t.date||"")>to) return false;
     if (q){ const hay=`${t.name} ${t.weed} ${t.council}`.toLowerCase(); if (!hay.includes(q.toLowerCase())) return false; }
-    const typeOK=(t.type==="Inspection"&&types.inspection)||(t.type==="Spot Spray"&&types.spot)||(t.type==="Road Spray"&&types.road);
+    const typeOK=( (!types.inspection && !types.spot && !types.road) // none checked → accept all
+                   || (t.type==="Inspection"&&types.inspection) || (t.type==="Spot Spray"&&types.spot) || (t.type==="Road Spray"&&types.road) );
     if (!typeOK) return false;
     const s=t.status||"Incomplete";
-    const statusOK=(s==="Complete"&&statuses.complete)||(s==="Incomplete"&&statuses.incomplete)||(s==="Draft"&&statuses.draft);
+    const statusesEmpty = !statuses.complete && !statuses.incomplete && !statuses.draft;
+    const statusOK = statusesEmpty || (s==="Complete"&&statuses.complete) || (s==="Incomplete"&&statuses.incomplete) || (s==="Draft"&&statuses.draft);
     return statusOK;
   }
   function renderRecords(){
@@ -296,9 +312,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderRecords();
 
+  // universal modal close (click outside, close button, Esc)
+  document.addEventListener("keydown",(e)=>{
+    if (e.key==="Escape"){ const m=$(".modal"); if (m) m.remove(); }
+  });
+
   function showJobPopup(t){
     const batchLink = t.batch ? `<a href="#" data-open-batch="${t.batch}">${t.batch}</a>` : "—";
     const linkedInsp = t.linkedInspectionId ? `<a href="#" data-open-insp="${t.linkedInspectionId}">${t.linkedInspectionId}</a>` : "—";
+    const photoHtml = t.photo ? `<div style="margin:.4rem 0"><img src="${t.photo}" alt="photo" style="max-width:100%;border-radius:8px"/></div>` : "";
     const html=`
       <div class="modal">
         <div class="card p">
@@ -311,14 +333,17 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="span2"><b>Weather:</b> ${fmt(t.temp)}°C, ${fmt(t.wind)} km/h, ${t.windDir||"–"}, ${fmt(t.humidity)}%</div>
             <div class="span2"><b>Notes:</b> ${t.notes || "—"}</div>
           </div>
+          ${photoHtml}
           <div class="row gap end" style="margin-top:.8rem;">
             <button class="pill" data-edit>Edit</button>
             <button class="pill warn" data-close>Close</button>
           </div>
         </div>
       </div>`;
-    const w=document.createElement("div"); w.innerHTML=html; document.body.appendChild(w.firstChild);
+    const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
     const modal=$(".modal");
+
+    // outside click or explicit close
     modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
 
     $("[data-open-batch]",modal)?.addEventListener("click",(e)=>{ e.preventDefault(); const b=DB.batches.find(x=>x.id===t.batch); b && showBatchPopup(b); });
@@ -331,7 +356,9 @@ document.addEventListener("DOMContentLoaded", () => {
       $("#weedSelect").value=t.weed||""; $("#batchSelect").value=t.batch||"";
       $("#jobDate").value=t.date||today(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
       $("#temp").value=t.temp||""; $("#wind").value=t.wind||""; $("#windDir").value=t.windDir||""; $("#humidity").value=t.humidity||"";
-      $("#notes").value=t.notes||""; modal.remove();
+      $("#notes").value=t.notes||"";
+      if (t.photo){ $("#photoPreview").src=t.photo; $("#photoPreview").style.display="block"; }
+      modal.remove();
     });
   }
 
@@ -378,7 +405,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </div>
       </div>`;
-    const w=document.createElement("div"); w.innerHTML=html; document.body.appendChild(w.firstChild);
+    const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
     const modal=$(".modal");
     modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
     $$("[data-open-job]",modal).forEach(a=> a.addEventListener("click",(e)=>{ e.preventDefault(); const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob); t && showJobPopup(t); }));
@@ -391,7 +418,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // inventory (with full-screen editor support)
+  // inventory (full-screen editor hooks kept; entry add via prompts)
   $("#addChem")?.addEventListener("click", ()=>{
     const name=prompt("Chemical name:"); if (!name) return;
     const active=prompt("Active ingredient:", "")||"";
@@ -403,14 +430,6 @@ document.addEventListener("DOMContentLoaded", () => {
     saveDB(); renderChems(); renderProcurement();
   });
 
-  function upsertProcurement(title){
-    if (!DB.procurement.find(p=>p.title===title)){
-      DB.procurement.push({id:"P"+Date.now()+Math.random().toString(16).slice(2), title, createdAt:new Date().toISOString(), done:false});
-      saveDB();
-    }
-  }
-
-  // Full-screen chemical editor support
   let _chemEditing = null;
   function openChemEditor(c) {
     _chemEditing = c;
@@ -422,10 +441,7 @@ document.addEventListener("DOMContentLoaded", () => {
     $("#ce_threshold").value = c.threshold || 0;
     $("#chemEditSheet").style.display = "block";
   }
-  function closeChemEditor() {
-    $("#chemEditSheet").style.display = "none";
-    _chemEditing = null;
-  }
+  function closeChemEditor() { $("#chemEditSheet").style.display = "none"; _chemEditing = null; }
   $("#ce_cancel")?.addEventListener("click", closeChemEditor);
   $("#ce_save")?.addEventListener("click", ()=>{
     if (!_chemEditing) return;
@@ -457,6 +473,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderChems();
 
+  function upsertProcurement(title){
+    DB.procurement ??= [];
+    if (!DB.procurement.find(p=>p.title===title)){
+      DB.procurement.push({id:"P"+Date.now()+Math.random().toString(16).slice(2), title, createdAt:new Date().toISOString(), done:false});
+      saveDB();
+    }
+  }
   function renderProcurement(){
     const ul = $("#procList");
     if (!ul) return;
@@ -471,20 +494,38 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderProcurement();
 
-  // mapping (weed filter enabled)
-  let map;
+  // mapping with Locate Me + clickable pins
+  let map, locateCtrl;
   function ensureMap(){
     if (map) return map;
     map = L.map("map").setView([-34.75,148.65], 10);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
+
+    // locate-me control
+    locateCtrl = L.control({position:"bottomright"});
+    locateCtrl.onAdd = function(){
+      const d=L.DomUtil.create("div","leaflet-bar");
+      d.style.background="#0c7d2b"; d.style.color="#fff"; d.style.borderRadius="6px"; d.style.padding="6px 10px"; d.style.cursor="pointer";
+      d.innerText="Locate Me";
+      d.onclick=()=>{
+        if (!navigator.geolocation){ toast("Enable location"); return;}
+        navigator.geolocation.getCurrentPosition(p=>{
+          const pt=[p.coords.latitude,p.coords.longitude];
+          map.setView(pt, 14);
+          L.circleMarker(pt,{radius:7,opacity:.9}).addTo(map).bindPopup("You are here").openPopup();
+        });
+      };
+      return d;
+    };
+    locateCtrl.addTo(map);
     return map;
   }
-  $("#mapSearchBtn")?.addEventListener("click", renderMap);
+  $("#mapSearchBtn")?.addEventListener("click", ()=>renderMap(true));
   $("#mapResetBtn")?.addEventListener("click", ()=>{
-    $("#mapFrom").value=""; $("#mapTo").value=""; $("#mapWeed").value=""; $("#mapType").value="All"; renderMap();
+    $("#mapFrom").value=""; $("#mapTo").value=""; $("#mapWeed").value=""; $("#mapType").value="All"; renderMap(true);
   });
 
-  function renderMap(){
+  function renderMap(fit=false){
     const m=ensureMap();
     m.eachLayer(l=>{ if (!(l instanceof L.TileLayer)) m.removeLayer(l); });
 
@@ -497,14 +538,20 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter(t=> typ==="All"?true:t.type===typ)
       .filter(t=> weedQ ? (String(t.weed||"").toLowerCase().includes(weedQ)) : true);
 
+    const group = L.featureGroup();
     tasks.forEach(t=>{
-      if (t.coords?.length>1) L.polyline(t.coords,{color:"yellow",weight:4,opacity:.9}).addTo(m);
+      if (t.coords?.length>1) group.addLayer(L.polyline(t.coords,{color:"yellow",weight:4,opacity:.9}));
       const pt = t.coords?.[0] || [-34.75 + Math.random()*0.1, 148.65 + Math.random()*0.1];
-      const popup = `<b>${t.name}</b><br>${t.type} • ${t.date}<br><button id="open_${t.id}" class="pill">Open</button>`;
-      const marker = L.marker(pt).addTo(m).bindPopup(popup);
+      const thumb = t.photo ? `<br><img src="${t.photo}" style="max-width:180px;border-radius:6px;margin-top:.3rem">` : "";
+      const popup = `<b>${t.name}</b><br>${t.type} • ${t.date}${thumb}<br><button id="open_${t.id}" class="pill" style="margin-top:.4rem">Open</button>`;
+      const marker = L.marker(pt); marker.bindPopup(popup);
       marker.on("popupopen", ()=> setTimeout(()=>{ const btn=document.getElementById(`open_${t.id}`); btn && (btn.onclick=()=> showJobPopup(t)); },0));
+      group.addLayer(marker);
     });
-    if (tasks.length && tasks[0].coords?.length) m.setView(tasks[0].coords[0], 12);
+    group.addTo(m);
+    if (fit && tasks.length){
+      try { m.fitBounds(group.getBounds().pad(0.2)); } catch {}
+    }
   }
 
   // toast
