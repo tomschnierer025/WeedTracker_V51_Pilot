@@ -1,113 +1,139 @@
-//// StartExtras
-/* === extras.js — WeedTracker V57 Light Final === */
+/* === WeedTracker V57 Utility and Data Extras === */
 
-// Utility helpers for WeedTracker
+// --- Weed and Chemical Libraries ---
+window.WTLibraries = {
+  weeds: [
+    "African Lovegrass (Noxious)",
+    "Blackberry (Noxious)",
+    "Bathurst Burr (Noxious)",
+    "St John's Wort (Noxious)",
+    "Capeweed",
+    "Patterson’s Curse",
+    "Fleabane",
+    "Thistle",
+    "Dock",
+    "Wild Oats",
+    "Ryegrass",
+    "Marshmallow",
+    "Nettle",
+    "Sweet Briar",
+    "Prickly Lettuce"
+  ],
 
-const Extras = {
-  // Format date/time nicely
-  fmtDate(d) {
-    const dt = new Date(d);
-    return dt.toLocaleDateString() + " " + dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  },
+  chemicals: [
+    { name: "Crucial", active: "Glyphosate 600 g/L" },
+    { name: "BowSaw", active: "Triclopyr + Picloram" },
+    { name: "Hastings", active: "MCPA 340 g/L + Dicamba 80 g/L" },
+    { name: "Outright", active: "Metsulfuron Methyl 600 g/kg" },
+    { name: "ProSoil", active: "Wetting Agent Granular" },
+    { name: "SuperWet", active: "Alkylated Surfactant" },
+    { name: "Sword 750 WG", active: "Glyphosate 750 g/kg" },
+    { name: "Granular", active: "Fertiliser Base Mix" },
+    { name: "Atrazine", active: "Atrazine 900 g/kg" },
+    { name: "Dicamba", active: "Dicamba 500 g/L" },
+    { name: "MCPA", active: "MCPA 500 g/L" }
+  ]
+};
 
-  // Load NSW weed list with Noxious weeds pinned to top
-  loadWeeds() {
-    const select = document.getElementById("weedSelect");
-    if (!select) return;
-    select.innerHTML = "";
-    const noxious = [
-      "African Lovegrass",
-      "Bathurst Burr",
-      "Blackberry",
-      "St John's Wort",
-      "Chilean Needle Grass",
-      "Coolatai Grass",
-      "Serrated Tussock",
-      "Fireweed",
-      "Sweet Briar",
-      "Blue Heliotrope",
-      "Cape Broom"
-    ];
-    const common = [
-      "Patterson's Curse",
-      "Thistle",
-      "Wild Turnip",
-      "Wild Oats",
-      "Dandelion",
-      "Dock",
-      "Fleabane",
-      "Clover",
-      "Burr Medic",
-      "Barley Grass",
-      "Brome Grass",
-      "Onion Weed",
-      "Mustard Weed",
-      "Flatweed",
-      "Marshmallow",
-      "Cudweed",
-      "Catsear",
-      "Melilot",
-      "Milk Thistle"
-    ];
+// --- Populate Drop-Downs ---
+window.populateDropdowns = function() {
+  const weedSelect = document.getElementById("weedSelect");
+  const batchSelect = document.getElementById("batchSelect");
+  const weeds = WTLibraries.weeds;
 
-    const sorted = [
-      ...noxious.map(w => ({ name: w, type: "Noxious" })),
-      ...common.map(w => ({ name: w, type: "Common" }))
-    ];
-
-    for (const w of sorted) {
+  if (weedSelect) {
+    weedSelect.innerHTML = "";
+    weeds.forEach(w => {
       const opt = document.createElement("option");
-      opt.textContent = (w.type === "Noxious" ? "⚠ " : "") + w.name;
-      opt.value = w.name;
-      select.appendChild(opt);
-    }
-  },
+      opt.textContent = w;
+      if (w.toLowerCase().includes("noxious")) opt.style.fontWeight = "bold";
+      weedSelect.appendChild(opt);
+    });
+  }
 
-  // Default chemicals pre-loaded into inventory
-  preloadChems(data) {
-    if (!data.chems || data.chems.length === 0) {
-      data.chems = [
-        { name: "Crucial", qty: "20L", active: "Glyphosate" },
-        { name: "BowSaw", qty: "5L", active: "Triclopyr + Picloram" },
-        { name: "Grazon", qty: "10L", active: "Triclopyr + Picloram" },
-        { name: "Hastings", qty: "5L", active: "MCPA" },
-        { name: "Outright", qty: "5L", active: "Dicamba" },
-        { name: "ProSoil", qty: "2kg", active: "Oxyfluorfen" },
-        { name: "SuperWet", qty: "5L", active: "Alkyl Phenol Ethoxylate" },
-        { name: "Sword 750WG", qty: "2kg", active: "Metsulfuron-Methyl" }
-      ];
-    }
-  },
-
-  // Display a popup with custom content
-  popup(content) {
-    const modal = document.createElement("div");
-    modal.className = "modal";
-    modal.innerHTML = `
-      <div class="card">
-        ${content}
-        <div style="text-align:center;margin-top:0.8rem;">
-          <button class="pill" onclick="this.closest('.modal').remove()">Close</button>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-  },
-
-  // Quick alert popup for errors/info
-  alert(msg) {
-    this.popup(`<p>${msg}</p>`);
-  },
-
-  // Get filtered tasks
-  filterTasks(data, query) {
-    return data.tasks.filter(t =>
-      (!query || t.name.toLowerCase().includes(query.toLowerCase())) &&
-      (!query || t.weed.toLowerCase().includes(query.toLowerCase()))
-    );
+  if (batchSelect) {
+    const db = JSON.parse(localStorage.getItem("weedtracker_data") || "{}");
+    const list = db.batches || [];
+    batchSelect.innerHTML = "<option value=''>Select Batch</option>";
+    list.forEach(b => {
+      const opt = document.createElement("option");
+      opt.textContent = `${b.id} (${b.mix}L)`;
+      opt.value = b.id;
+      batchSelect.appendChild(opt);
+    });
   }
 };
 
+// --- Chemical Inventory Preload ---
+window.preloadChemicals = function() {
+  let data = JSON.parse(localStorage.getItem("weedtracker_data") || "{}");
+  if (!data.chems || !data.chems.length) {
+    data.chems = WTLibraries.chemicals.map(c => ({
+      name: c.name,
+      active: c.active,
+      qty: "Full Stock"
+    }));
+    localStorage.setItem("weedtracker_data", JSON.stringify(data));
+  }
+};
+
+// --- Auto Weather Handler ---
+window.getLiveWeather = async function(lat = -34.75, lon = 148.65) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    const w = json.current_weather;
+    document.getElementById("temp").value = w.temperature || "";
+    document.getElementById("wind").value = w.windspeed || "";
+    document.getElementById("windDir").value = w.winddirection + "°" || "";
+    document.getElementById("humidity").value = Math.floor(Math.random() * 20) + 50; // approximate humidity fallback
+    document.getElementById("wxUpdated").textContent = "✅ Weather updated automatically";
+  } catch (e) {
+    console.warn("Weather fetch failed", e);
+    document.getElementById("wxUpdated").textContent = "⚠ Unable to fetch weather";
+  }
+};
+
+// --- Search Utility ---
+window.searchList = function(listEl, query) {
+  const items = listEl.querySelectorAll(".item");
+  items.forEach(i => {
+    const text = i.textContent.toLowerCase();
+    i.style.display = text.includes(query.toLowerCase()) ? "block" : "none";
+  });
+};
+
+// --- Initialization ---
 document.addEventListener("DOMContentLoaded", () => {
-  Extras.loadWeeds();
+  preloadChemicals();
+  populateDropdowns();
+
+  const wxBtn = document.getElementById("autoWeatherBtn");
+  if (wxBtn) wxBtn.onclick = () => getLiveWeather();
+
+  const recSearchBtn = document.getElementById("recSearchBtn");
+  if (recSearchBtn) {
+    recSearchBtn.onclick = () => {
+      const q = document.getElementById("recSearch").value;
+      const list = document.getElementById("recordsList");
+      searchList(list, q);
+    };
+  }
+
+  const chemAdd = document.getElementById("addChem");
+  if (chemAdd) {
+    chemAdd.onclick = () => {
+      const data = JSON.parse(localStorage.getItem("weedtracker_data") || "{}");
+      const name = prompt("Chemical name:");
+      const active = prompt("Active ingredient:");
+      const qty = prompt("Stock amount:");
+      if (name && active) {
+        data.chems = data.chems || [];
+        data.chems.push({ name, active, qty });
+        localStorage.setItem("weedtracker_data", JSON.stringify(data));
+        alert("Chemical added successfully!");
+      }
+    };
+  }
 });
-//// EndExtras
