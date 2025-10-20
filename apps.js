@@ -1,56 +1,55 @@
-/* === WeedTracker V60 Final Pilot — FULL apps.js ===
-   - AU date format (DD-MM-YYYY) + compact code for job names
-   - Locate Me (first) → Auto Name (second)
-   - Weather auto-fill: temp, humidity, wind, wind dir (° + compass N/NE/E/…)
-   - “⚠ noxious” weeds pinned at top (scroll-only)
-   - Records & Batches pop-ups fixed (Close / Esc / overlay)
-   - Apple Maps navigation (pins + records)
-   - SDS (Chemwatch) link pinned to top of Inventory
-   - One home button per row, darker theme (in CSS)
-   - Spinners + toasts
-   - LocalStorage DB with rolling backups
+/* === WeedTracker V60 Final Pilot — apps.js (Repair + Color Edition) ===
+   What’s in here (all completed):
+   - Buttons fixed (no dead clicks). Pop-ups for Records & Batches working.
+   - AU date format display (DD-MM-YYYY) + compact code for job names (DDMMYYYY).
+   - Locate Me (first) → Auto Name (second).
+   - Weather auto-fill (temp, humidity, wind, direction in ° + N/NE/E/…).
+   - Noxious weeds pinned to top of list (⚠) — scroll only.
+   - Apple Maps navigation from map pins and record pop-ups.
+   - “Locate Me” control on the map.
+   - SDS (Chemwatch) link is injected in Inventory by apps (pinned to top).
+   - One button per row on Home (colors are in styles.css).
+   - Spinners & toasts during save/create actions.
+   - LocalStorage DB + small rotating backups.
 */
 
 document.addEventListener("DOMContentLoaded", () => {
-  /* ---------- helpers ---------- */
+  /* ----------------- helpers ----------------- */
   const $  = (s, r=document) => r.querySelector(s);
-  const $$ = (s, r=document) => [...r.querySelectorAll(s)];
-  const fmt = (n,d=0)=> (n==null||n==="")?"–":Number(n).toFixed(d);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const todayISO = () => new Date().toISOString().split("T")[0];
   const nowTime  = () => new Date().toTimeString().slice(0,5);
-  const toCompass = (deg)=>{
-    if (deg==null||deg==="") return "";
+  const fmt = (n,d=0)=> (n==null||n==="")?"–":Number(n).toFixed(d);
+  const toCompass = deg => {
+    if (deg==null || deg==="") return "";
     const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
-    return dirs[Math.round(((+deg%360)+360)%360/22.5)%16];
+    return dirs[Math.round((((+deg)%360)+360)%360/22.5)%16];
   };
-  const formatDateAU = (d)=>{
+  const auDate = (d)=>{
     const dt = (d instanceof Date) ? d : new Date(d);
     const dd = String(dt.getDate()).padStart(2,"0");
     const mm = String(dt.getMonth()+1).padStart(2,"0");
     const yyyy = dt.getFullYear();
     return `${dd}-${mm}-${yyyy}`;
   };
-  const formatDateAUCompact = (d)=>{
+  const auDateCompact = (d)=>{
     const dt = (d instanceof Date) ? d : new Date(d);
     const dd = String(dt.getDate()).padStart(2,"0");
     const mm = String(dt.getMonth()+1).padStart(2,"0");
     const yyyy = dt.getFullYear();
     return `${dd}${mm}${yyyy}`;
   };
-  const toast=(msg,ms=1500)=>{
-    const d=document.createElement("div");
-    d.className="toast";
-    d.textContent=msg;
-    document.body.appendChild(d);
-    setTimeout(()=>d.remove(), ms);
+  const toast = (msg, ms=1600)=>{
+    const old=document.querySelector(".toast"); if(old) old.remove();
+    const d=document.createElement("div"); d.className="toast"; d.textContent=msg; document.body.appendChild(d);
+    setTimeout(()=>d.remove(),ms);
   };
-  const spin=(on,msg="Working…")=>{
-    const s=$("#spinner"); if (!s) return;
-    s.textContent = msg;
-    s.classList[on?"add":"remove"]("active");
+  const spinner = {
+    on(msg="Working…"){ const s=$("#spinner"); if(!s) return; s.textContent=msg; s.classList.add("active"); },
+    off(){ $("#spinner")?.classList.remove("active"); }
   };
 
-  /* ---------- DB ---------- */
+  /* ----------------- DB + seeds ----------------- */
   const STORAGE_KEY="weedtracker_data";
   const BACKUP_KEY ="weedtracker_backup";
   const MAX_BACKUPS=3;
@@ -67,19 +66,29 @@ document.addEventListener("DOMContentLoaded", () => {
   ];
 
   const DEFAULT_CHEMS = [
-    {name:"Crucial", active:"Glyphosate 540 g/L", containerSize:20, containerUnit:"L", containers:4, threshold:2},
-    {name:"SuperWet", active:"Non-ionic surfactant", containerSize:20, containerUnit:"L", containers:1, threshold:1},
-    {name:"Bow Saw 600", active:"Triclopyr 600 g/L", containerSize:1, containerUnit:"L", containers:2, threshold:1},
-    {name:"Clethodim", active:"Clethodim 240 g/L", containerSize:20, containerUnit:"L", containers:1, threshold:1},
-    {name:"Grazon", active:"Triclopyr + Picloram", containerSize:20, containerUnit:"L", containers:1, threshold:1},
-    {name:"Bosol", active:"Metsulfuron-methyl", containerSize:500, containerUnit:"g", containers:2, threshold:1},
-    {name:"Hastings", active:"MCPA", containerSize:20, containerUnit:"L", containers:1, threshold:1},
-    {name:"Outright", active:"Fluroxypyr", containerSize:20, containerUnit:"L", containers:1, threshold:1}
+    {name:"Crucial",   active:"Glyphosate 540 g/L",   containerSize:20, containerUnit:"L", containers:4, threshold:2},
+    {name:"SuperWet",  active:"Non-ionic surfactant", containerSize:20, containerUnit:"L", containers:1, threshold:1},
+    {name:"Bow Saw 600",active:"Triclopyr 600 g/L",    containerSize:1,  containerUnit:"L", containers:2, threshold:1},
+    {name:"Clethodim", active:"Clethodim 240 g/L",    containerSize:20, containerUnit:"L", containers:1, threshold:1},
+    {name:"Grazon",    active:"Triclopyr + Picloram", containerSize:20, containerUnit:"L", containers:1, threshold:1},
+    {name:"Bosol",     active:"Metsulfuron-methyl",   containerSize:500,containerUnit:"g", containers:2, threshold:1},
+    {name:"Hastings",  active:"MCPA",                 containerSize:20, containerUnit:"L", containers:1, threshold:1},
+    {name:"Outright",  active:"Fluroxypyr",           containerSize:20, containerUnit:"L", containers:1, threshold:1}
   ];
 
-  const ensureDB=()=>{
+  function saveDB(withBackup=true){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+    if (!withBackup) return;
+    try{
+      const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
+      arr.unshift({ts:new Date().toISOString(), db:DB});
+      while (arr.length>MAX_BACKUPS) arr.pop();
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
+    }catch{}
+  }
+  function ensureDB(){
     let db;
-    try{ db=JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}"); }catch{ db={}; }
+    try{ db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }catch{ db = {}; }
     db.version ??= 60;
     db.accountEmail ??= "";
     db.tasks ??= [];
@@ -90,57 +99,72 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!db.chems.length) db.chems = DEFAULT_CHEMS.slice();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
     return db;
-  };
-  let DB = ensureDB();
-  const saveDB = (withBackup=true)=>{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
-    if (withBackup){
-      try{
-        const arr = JSON.parse(localStorage.getItem(BACKUP_KEY)||"[]");
-        arr.unshift({ts:new Date().toISOString(), db:DB});
-        while(arr.length>MAX_BACKUPS) arr.pop();
-        localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
-      }catch{}
-    }
-  };
-  const restoreLatest=()=>{
-    const arr = JSON.parse(localStorage.getItem(BACKUP_KEY)||"[]");
+  }
+  function restoreLatest(){
+    const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
     if (!arr.length) return null;
-    const latest=arr[0].db;
+    const latest = arr[0].db;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(latest));
     return latest;
-  };
+  }
+  let DB = ensureDB();
 
+  // Offer restore if everything empty but backups exist
   if ((!DB.tasks.length && !DB.batches.length && !DB.chems.length) && localStorage.getItem(BACKUP_KEY)){
     if (confirm("Backup found. Restore data now?")){
-      const r=restoreLatest(); if (r) DB=r;
+      const r=restoreLatest();
+      if (r){ DB=r; }
     }
   }
 
-  /* ---------- navigation ---------- */
+  /* ----------------- splash fade ----------------- */
+  const splash=$("#splash");
+  if (splash){
+    setTimeout(()=> splash.classList.add("hide"), 900);
+    splash.addEventListener("transitionend", ()=> splash.remove(), {once:true});
+  }
+
+  /* ----------------- navigation ----------------- */
   const screens = $$(".screen");
   function switchScreen(id){
     screens.forEach(s=>s.classList.remove("active"));
     $("#"+id)?.classList.add("active");
-    if (id==="records")  renderRecords();
-    if (id==="batches")  renderBatches();
-    if (id==="inventory") renderChems(), renderProcurement();
-    if (id==="mapping")  renderMap(true);
+
+    // lazy renders
+    if (id==="records")   renderRecords();
+    if (id==="batches")   renderBatches();
+    if (id==="inventory") { renderChems(); renderProcurement(); }
+    if (id==="mapping")   renderMap(true);
   }
-  $$("[data-target]").forEach(b=> b.addEventListener("click", ()=> switchScreen(b.dataset.target)));
+  // Primary nav buttons
+  $$("[data-target]").forEach(b=>{
+    b.addEventListener("click", ()=> switchScreen(b.dataset.target));
+  });
+  // Back to home
   $$(".back").forEach(b=> b.addEventListener("click", ()=> switchScreen("home")));
 
-  /* ---------- settings ---------- */
+  // Failsafe: if any nav button was missed by the browser cache, rebind on body
+  document.body.addEventListener("click",(e)=>{
+    const el=e.target.closest("[data-target]");
+    if (el){ e.preventDefault(); switchScreen(el.dataset.target); }
+  });
+
+  /* ----------------- settings ----------------- */
   const accountInput=$("#accountEmail");
-  accountInput && (accountInput.value = DB.accountEmail || "");
-  $("#saveAccount")?.addEventListener("click", ()=>{ DB.accountEmail=(accountInput.value||"").trim(); saveDB(); toast("Saved"); });
+  if (accountInput) accountInput.value = DB.accountEmail || "";
+  $("#saveAccount")?.addEventListener("click", ()=>{
+    DB.accountEmail = (accountInput.value||"").trim();
+    saveDB(false); toast("Saved");
+  });
   $("#exportBtn")?.addEventListener("click", ()=>{
     const blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob); const a=document.createElement("a");
-    a.href=url; a.download="weedtracker_data.json"; a.click();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download="weedtracker_data.json"; a.click();
   });
   $("#restoreBtn")?.addEventListener("click", ()=>{
-    const r=restoreLatest(); if (r){ DB=r; renderRecords(); renderBatches(); renderChems(); toast("Restored"); } else toast("No backup");
+    const r=restoreLatest();
+    if (r){ DB=r; renderRecords(); renderBatches(); renderChems(); renderProcurement(); toast("Restored"); }
+    else toast("No backup found");
   });
   $("#clearBtn")?.addEventListener("click", ()=>{
     if (!confirm("Clear ALL local data?")) return;
@@ -150,45 +174,56 @@ document.addEventListener("DOMContentLoaded", () => {
     toast("Cleared");
   });
 
-  /* ---------- create task ---------- */
+  /* ----------------- create task ----------------- */
+  // Reminder (1–52 weeks)
   const remSel=$("#reminderWeeks");
   if (remSel && !remSel.options.length) for (let i=1;i<=52;i++){ const o=document.createElement("option"); o.value=o.textContent=i; remSel.appendChild(o); }
+
+  // Ensure date control set (ISO for input)
   const jobDate=$("#jobDate"); if (jobDate && !jobDate.value) jobDate.value = todayISO();
 
+  // Show roadside tracking only for Road Spray
   const taskTypeSel=$("#taskType");
   const roadTrackBlock=$("#roadTrackBlock");
-  const syncTrack=()=> roadTrackBlock && (roadTrackBlock.style.display = (taskTypeSel.value==="Road Spray")?"block":"none");
-  taskTypeSel?.addEventListener("change", syncTrack); syncTrack();
+  const trackVis = ()=>{ if (roadTrackBlock) roadTrackBlock.style.display = (taskTypeSel.value==="Road Spray")?"block":"none"; };
+  taskTypeSel?.addEventListener("change", trackVis); trackVis();
 
+  // Locate Me then Auto Name
+  const locateBtn=$("#locateBtn");
+  const locRoad=$("#locRoad");
   let currentRoad="";
-  $("#locateBtn")?.addEventListener("click", ()=>{
-    if (!navigator.geolocation){ toast("Enable Location"); return; }
-    spin(true,"Locating…");
+
+  locateBtn?.addEventListener("click", ()=>{
+    if (!navigator.geolocation){ toast("Enable location services"); return; }
+    spinner.on("Locating…");
     navigator.geolocation.getCurrentPosition(async pos=>{
       const {latitude:lat, longitude:lon}=pos.coords;
       try{
         const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
         const j=await r.json();
         currentRoad = j.address?.road || j.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      }catch{ currentRoad=`${lat.toFixed(5)}, ${lon.toFixed(5)}`; }
-      $("#locRoad").textContent=currentRoad||"Unknown";
-      spin(false);
-    }, ()=>{ spin(false); toast("GPS failed"); });
+      }catch{
+        currentRoad = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      }
+      if (locRoad) locRoad.textContent = currentRoad || "Unknown";
+      spinner.off();
+    }, ()=>{ spinner.off(); toast("GPS failed"); });
   });
 
-  const TYPE_PREFIX = { "Inspection":"I", "Spot Spray":"SS", "Road Spray":"RS" };
+  const TYPE_PREFIX={Inspection:"I","Spot Spray":"SS","Road Spray":"RS"};
   $("#autoNameBtn")?.addEventListener("click", ()=>{
     const t = $("#taskType").value || "Inspection";
     const prefix = TYPE_PREFIX[t] || "I";
     const dt = jobDate && jobDate.value ? new Date(jobDate.value) : new Date();
-    const compact = formatDateAUCompact(dt);
-    const base = (currentRoad || "Unknown").replace(/\s+/g,"");
-    $("#jobName").value = `${prefix}${compact}_${base}`;
+    const code = auDateCompact(dt);
+    const base = (currentRoad||"Unknown").replace(/\s+/g,"");
+    $("#jobName").value = `${prefix}${code}_${base}`;
   });
 
+  // Weather auto-fill
   $("#autoWeatherBtn")?.addEventListener("click", ()=>{
-    if (!navigator.geolocation){ toast("Enable Location"); return; }
-    spin(true,"Fetching weather…");
+    if (!navigator.geolocation){ toast("Enable location services"); return; }
+    spinner.on("Fetching weather…");
     navigator.geolocation.getCurrentPosition(async pos=>{
       try{
         const {latitude, longitude}=pos.coords;
@@ -201,16 +236,17 @@ document.addEventListener("DOMContentLoaded", () => {
         $("#humidity").value = c.relative_humidity_2m ?? "";
         $("#wxUpdated").textContent = "Updated @ " + nowTime();
       }catch{ toast("Weather unavailable"); }
-      spin(false);
-    }, ()=>{ spin(false); toast("Location not available"); });
+      spinner.off();
+    }, ()=>{ spinner.off(); toast("Location not available"); });
   });
 
+  // Populate weeds (noxious first)
   function populateWeeds(){
-    const sel=$("#weedSelect"); if(!sel) return;
+    const sel=$("#weedSelect"); if (!sel) return;
     sel.innerHTML="";
     const def=document.createElement("option"); def.value=""; def.textContent="— Select Weed —"; sel.appendChild(def);
-    const nox = DB.weeds.filter(w=>/noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
-    const rest= DB.weeds.filter(w=>! /noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
+    const nox=DB.weeds.filter(w=>/noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
+    const rest=DB.weeds.filter(w=>! /noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
     [...nox, ...rest].forEach(w=>{
       const o=document.createElement("option");
       o.value=w; o.textContent = /noxious/i.test(w) ? `⚠ ${w}` : w;
@@ -219,21 +255,23 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   populateWeeds();
 
+  // Populate batches select
   function populateBatchSelect(){
-    const sel=$("#batchSelect"); if(!sel) return;
+    const sel=$("#batchSelect"); if (!sel) return;
     sel.innerHTML="";
     const def=document.createElement("option"); def.value=""; def.textContent="— Select Batch —"; sel.appendChild(def);
     DB.batches.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(b=>{
       const o=document.createElement("option");
-      o.value=b.id; o.textContent=`${b.id} • ${formatDateAU(b.date)} • remain ${fmt(b.remaining)} L`;
+      o.value=b.id; o.textContent=`${b.id} • ${auDate(b.date)} • remain ${fmt(b.remaining)} L`;
       sel.appendChild(o);
     });
   }
   populateBatchSelect();
 
+  // Roadside tracking
   let trackTimer=null;
   $("#startTrack")?.addEventListener("click", ()=>{
-    if (!navigator.geolocation){ toast("Enable Location"); return; }
+    if (!navigator.geolocation){ toast("Enable location services"); return; }
     $("#trackStatus").textContent="Tracking…";
     const coords=[];
     if (trackTimer) clearInterval(trackTimer);
@@ -249,6 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
     $("#trackStatus").textContent="Stopped";
   });
 
+  // Photo upload
   let photoDataURL="";
   $("#photoInput")?.addEventListener("change",(e)=>{
     const f=e.target.files?.[0]; if(!f) return;
@@ -257,13 +296,14 @@ document.addEventListener("DOMContentLoaded", () => {
     rd.readAsDataURL(f);
   });
 
+  // Save task / draft
   $("#saveTask")?.addEventListener("click", ()=> saveTask(false));
   $("#saveDraft")?.addEventListener("click", ()=> saveTask(true));
 
   function saveTask(isDraft){
-    spin(true,"Saving task…");
+    spinner.on("Saving task…");
     const id=Date.now();
-    const status=isDraft?"Draft":("Incomplete");
+    const status=isDraft?"Draft":"Incomplete";
     const track=JSON.parse(localStorage.getItem("lastTrack")||"[]");
     const obj={
       id,
@@ -273,7 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
       type: $("#taskType").value,
       weed: $("#weedSelect").value,
       batch: $("#batchSelect").value,
-      date: $("#jobDate").value || todayISO(),
+      date: $("#jobDate").value || todayISO(), // stored ISO
       start: $("#startTime").value || "",
       end:   $("#endTime").value   || "",
       temp: $("#temp").value, wind: $("#wind").value, windDir: $("#windDir").value, humidity: $("#humidity").value,
@@ -287,6 +327,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const existing = DB.tasks.find(t=> t.name===obj.name);
     if (existing) Object.assign(existing,obj); else DB.tasks.push(obj);
 
+    // consume batch a little on Road Spray as heuristic
     if (obj.batch){
       const b=DB.batches.find(x=>x.id===obj.batch);
       if (b){ const used=(obj.type==="Road Spray" && obj.coords?.length>1)?100:0;
@@ -295,13 +336,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     saveDB(); populateBatchSelect(); renderRecords();
-    spin(false); toast("Saved");
+    spinner.off(); toast("Saved");
   }
 
-  /* ---------- records ---------- */
+  /* ----------------- records ----------------- */
   $("#recSearchBtn")?.addEventListener("click", renderRecords);
   $("#recResetBtn")?.addEventListener("click", ()=>{
-    $("#recSearch").value=""; $("#recFrom").value=""; $("#recTo").value=""; $("#recType").value="All";
+    $("#recSearch").value=""; $("#recFrom").value=""; $("#recTo").value="";
+    $("#recType").value="All";
     renderRecords();
   });
 
@@ -327,12 +369,12 @@ document.addEventListener("DOMContentLoaded", () => {
       .sort((a,b)=>(b.date||"").localeCompare(a.date||""))
       .forEach(t=>{
         const d=document.createElement("div"); d.className="item";
-        d.innerHTML=`<b>${t.name}</b><br><small>${t.type} • ${formatDateAU(t.date)} • ${t.status}</small>
+        d.innerHTML=`<b>${t.name}</b><br><small>${t.type} • ${auDate(t.date)} • ${t.status}</small>
           <div class="row end">
             <button class="pill" data-open="${t.id}">Open</button>
             ${t.coords?.length?`<button class="pill" data-nav="${t.id}">Navigate</button>`:""}
           </div>`;
-        d.querySelector("[data-open]").addEventListener("click", ()=> showJobPopup(t));
+        d.querySelector("[data-open]")?.addEventListener("click", ()=> showJobPopup(t));
         const nb=d.querySelector("[data-nav]");
         nb && nb.addEventListener("click", ()=>{
           const pt=t.coords?.[0]; if(!pt){ toast("No coords"); return; }
@@ -343,7 +385,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderRecords();
 
-  /* ---------- batches ---------- */
+  /* ----------------- batches ----------------- */
   $("#batSearchBtn")?.addEventListener("click", renderBatches);
   $("#batResetBtn")?.addEventListener("click", ()=>{ $("#batFrom").value=""; $("#batTo").value=""; renderBatches(); });
   $("#newBatch")?.addEventListener("click", ()=>{
@@ -357,19 +399,20 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderBatches(){
     const list=$("#batchList"); if(!list) return; list.innerHTML="";
     const from=$("#batFrom").value||""; const to=$("#batTo").value||"";
-    DB.batches.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to))
+    DB.batches
+      .filter(b=>(!from||b.date>=from)&&(!to||b.date<=to))
       .sort((a,b)=>(b.date||"").localeCompare(a.date||""))
       .forEach(b=>{
         const item=document.createElement("div"); item.className="item";
-        item.innerHTML=`<b>${b.id}</b><br><small>${formatDateAU(b.date)} • Total ${fmt(b.mix)} L • Remaining ${fmt(b.remaining)} L</small>
+        item.innerHTML=`<b>${b.id}</b><br><small>${auDate(b.date)} • Total ${fmt(b.mix)} L • Remaining ${fmt(b.remaining)} L</small>
           <div class="row end"><button class="pill" data-open="${b.id}">Open</button></div>`;
-        item.querySelector("[data-open]").addEventListener("click", ()=> showBatchPopup(b));
+        item.querySelector("[data-open]")?.addEventListener("click", ()=> showBatchPopup(b));
         list.appendChild(item);
       });
   }
   renderBatches();
 
-  /* ---------- inventory ---------- */
+  /* ----------------- inventory (with SDS pinned link) ----------------- */
   $("#addChem")?.addEventListener("click", ()=>{
     const name=prompt("Chemical name:"); if(!name) return;
     const active=prompt("Active ingredient:","")||"";
@@ -382,7 +425,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   let _chemEditing=null;
-  $("#ce_cancel")?.addEventListener("click", ()=> $("#chemEditSheet").style.display="none"));
+  $("#ce_cancel")?.addEventListener("click", ()=>{ $("#chemEditSheet").style.display="none"; _chemEditing=null; });
   $("#ce_save")?.addEventListener("click", ()=>{
     if (!_chemEditing) return;
     _chemEditing.name=$("#ce_name").value.trim();
@@ -391,11 +434,13 @@ document.addEventListener("DOMContentLoaded", () => {
     _chemEditing.containerUnit=$("#ce_unit").value||"L";
     _chemEditing.containers=Number($("#ce_count").value)||0;
     _chemEditing.threshold=Number($("#ce_threshold").value)||0;
-    saveDB(); $("#chemEditSheet").style.display="none"; renderChems(); renderProcurement(); toast("Chemical updated");
+    saveDB(); renderChems(); renderProcurement();
+    $("#chemEditSheet").style.display="none"; _chemEditing=null; toast("Chemical updated");
   });
 
   function renderChems(){
     const list=$("#chemList"); if(!list) return; list.innerHTML="";
+    // SDS link pinned at top
     const sds=document.createElement("div");
     sds.className="item sds";
     sds.innerHTML=`<b>Safety Data Sheets (SDS)</b><br>
@@ -413,14 +458,14 @@ document.addEventListener("DOMContentLoaded", () => {
           <button class="pill warn" data-del>Delete</button>
         </div>`;
       if (c.threshold && (c.containers||0)<c.threshold) upsertProc(`Low stock: ${c.name}`);
-      card.querySelector("[data-edit]").addEventListener("click", ()=>{
+      card.querySelector("[data-edit]")?.addEventListener("click", ()=>{
         _chemEditing=c;
         $("#ce_name").value=c.name; $("#ce_active").value=c.active||"";
         $("#ce_size").value=c.containerSize||0; $("#ce_unit").value=c.containerUnit||"L";
         $("#ce_count").value=c.containers||0; $("#ce_threshold").value=c.threshold||0;
         $("#chemEditSheet").style.display="block";
       });
-      card.querySelector("[data-del]").addEventListener("click", ()=>{
+      card.querySelector("[data-del]")?.addEventListener("click", ()=>{
         if(!confirm("Delete chemical?")) return;
         DB.chems=DB.chems.filter(x=>x!==c); saveDB(); renderChems(); renderProcurement();
       });
@@ -430,7 +475,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function upsertProc(title){
     DB.procurement ??= [];
     if (!DB.procurement.find(p=>p.title===title)){
-      DB.procurement.push({id:"P"+Date.now(),title,createdAt:new Date().toISOString(),done:false});
+      DB.procurement.push({id:"P"+Date.now(), title, createdAt:new Date().toISOString(), done:false});
       saveDB();
     }
   }
@@ -446,14 +491,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderChems(); renderProcurement();
 
-  /* ---------- mapping ---------- */
+  /* ----------------- mapping ----------------- */
   let map, locateCtrl;
   function ensureMap(){
     if (map) return map;
     map = L.map("map").setView([-34.75,148.65], 10);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
+
+    // Locate Me control
     locateCtrl = L.control({position:"bottomright"});
-    locateCtrl.onAdd = function(){
+    locateCtrl.onAdd=function(){
       const d=L.DomUtil.create("div","leaflet-bar");
       Object.assign(d.style,{background:"#0c7d2b",color:"#fff",borderRadius:"6px",padding:"6px 10px",cursor:"pointer"});
       d.innerText="Locate Me";
@@ -470,26 +517,28 @@ document.addEventListener("DOMContentLoaded", () => {
     locateCtrl.addTo(map);
     return map;
   }
+
   $("#mapSearchBtn")?.addEventListener("click", ()=>renderMap(true));
   $("#mapResetBtn")?.addEventListener("click", ()=>{
-    $("#mapFrom").value=""; $("#mapTo").value=""; $("#mapWeed").value=""; $("#mapType").value="All"; renderMap(true);
+    $("#mapFrom").value=""; $("#mapTo").value=""; $("#mapWeed").value=""; $("#mapType").value="All";
+    renderMap(true);
   });
 
   function openAppleMaps(lat, lon){
-    const mapsURL = `maps://?daddr=${lat},${lon}&dirflg=d`;
-    const webURL  = `https://maps.apple.com/?daddr=${lat},${lon}&dirflg=d`;
-    const a=document.createElement("a");
-    a.href = mapsURL; document.body.appendChild(a); a.click();
-    setTimeout(()=>{ window.open(webURL, "_blank"); a.remove(); }, 300);
+    const mapsURL=`maps://?daddr=${lat},${lon}&dirflg=d`;
+    const webURL =`https://maps.apple.com/?daddr=${lat},${lon}&dirflg=d`;
+    const a=document.createElement("a"); a.href=mapsURL; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ window.open(webURL,"_blank"); a.remove(); },300);
   }
 
   function renderMap(fit=false){
     const m=ensureMap();
+    // clear non-tile layers
     m.eachLayer(l=>{ if (!(l instanceof L.TileLayer)) m.removeLayer(l); });
 
     const from=$("#mapFrom").value||""; const to=$("#mapTo").value||"";
     const typ=$("#mapType").value||"All";
-    const weedQ=($("#mapWeed")?.value || "").trim().toLowerCase();
+    const weedQ=($("#mapWeed")?.value||"").trim().toLowerCase();
 
     const tasks=DB.tasks
       .filter(t=>!t.archived)
@@ -497,24 +546,23 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter(t=> typ==="All"?true:t.type===typ)
       .filter(t=> weedQ ? (String(t.weed||"").toLowerCase().includes(weedQ)) : true);
 
-    const group = L.featureGroup();
+    const group=L.featureGroup();
 
     tasks.forEach(t=>{
       if (t.coords?.length>1) group.addLayer(L.polyline(t.coords,{color:"yellow",weight:4,opacity:.9}));
-      const pt = t.coords?.[0] || [-34.75 + Math.random()*0.08, 148.65 + Math.random()*0.08];
-      const thumb = t.photo ? `<br><img src="${t.photo}" style="max-width:180px;border-radius:6px;margin-top:.3rem">` : "";
-      const openId = `open_${t.id}`;
-      const navId  = `nav_${t.id}`;
-      const popup = `<b>${t.name}</b><br>${t.type} • ${formatDateAU(t.date)}${thumb}
-                     <br><button id="${openId}" class="pill" style="margin-top:.35rem">Open</button>
-                     <button id="${navId}" class="pill" style="margin-top:.35rem;margin-left:.4rem">Navigate</button>`;
-      const marker = L.marker(pt); marker.bindPopup(popup);
+      const pt=t.coords?.[0] || [-34.75 + Math.random()*0.08, 148.65 + Math.random()*0.08];
+      const thumb=t.photo ? `<br><img src="${t.photo}" style="max-width:180px;border-radius:6px;margin-top:.3rem">` : "";
+      const openId=`open_${t.id}`; const navId=`nav_${t.id}`;
+      const popup=`<b>${t.name}</b><br>${t.type} • ${auDate(t.date)}${thumb}
+                   <br><button id="${openId}" class="pill" style="margin-top:.35rem">Open</button>
+                   <button id="${navId}" class="pill" style="margin-top:.35rem;margin-left:.4rem">Navigate</button>`;
+      const marker=L.marker(pt); marker.bindPopup(popup);
       marker.on("popupopen", ()=>{
         setTimeout(()=>{
           const ob=document.getElementById(openId);
           const nb=document.getElementById(navId);
-          ob && (ob.onclick = ()=> showJobPopup(t));
-          nb && (nb.onclick = ()=> openAppleMaps(pt[0], pt[1]));
+          if (ob) ob.onclick = ()=> showJobPopup(t);
+          if (nb) nb.onclick = ()=> openAppleMaps(pt[0], pt[1]);
         },0);
       });
       group.addLayer(marker);
@@ -522,16 +570,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     group.addTo(m);
     if (fit && tasks.length){
-      try { m.fitBounds(group.getBounds().pad(0.2)); } catch {}
+      try{ m.fitBounds(group.getBounds().pad(0.2)); }catch{}
     }
+    // show last tracked line (quick visual)
     try{
-      const last = JSON.parse(localStorage.getItem("lastTrack")||"[]");
-      if (Array.isArray(last) && last.length>1) L.polyline(last,{color:"#ffda44",weight:3,opacity:.8}).addTo(m);
+      const last=JSON.parse(localStorage.getItem("lastTrack")||"[]");
+      if (Array.isArray(last) && last.length>1){
+        L.polyline(last,{color:"#ffda44",weight:3,opacity:.85}).addTo(m);
+      }
     }catch{}
   }
 
-  /* ---------- popups ---------- */
-  document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ const m=document.querySelector(".modal"); if(m) m.remove(); } });
+  /* ----------------- popups ----------------- */
+  document.addEventListener("keydown",(e)=>{
+    if (e.key==="Escape"){ const m=document.querySelector(".modal"); if(m) m.remove(); }
+  });
 
   function showBatchPopup(b){
     const jobs=DB.tasks.filter(t=>t.batch===b.id);
@@ -540,10 +593,10 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="modal">
         <div class="card p">
           <h3 style="margin-top:0">${b.id}</h3>
-          <div><b>Date:</b> ${formatDateAU(b.date) || "–"} · <b>Time:</b> ${b.time || "–"}</div>
+          <div><b>Date:</b> ${auDate(b.date)||"–"} · <b>Time:</b> ${b.time||"–"}</div>
           <div><b>Total Mix Made:</b> ${fmt(b.mix)} L</div>
           <div><b>Total Mix Remaining:</b> ${fmt(b.remaining)} L</div>
-          <div style="margin-top:.4rem;"><b>Chemicals (made of):</b><br>${b.chemicals || "—"}</div>
+          <div style="margin-top:.4rem;"><b>Chemicals (made of):</b><br>${b.chemicals||"—"}</div>
           <div style="margin-top:.4rem;"><b>Linked Jobs:</b><br>${jobsHtml}</div>
           <div class="row gap end" style="margin-top:.8rem;">
             <button class="pill" data-edit-batch>Edit</button>
@@ -554,8 +607,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
     const modal=document.querySelector(".modal");
     modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
-    document.querySelectorAll("[data-open-job]").forEach(a=> a.addEventListener("click",(e)=>{ e.preventDefault(); const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob); t && showJobPopup(t); }));
-    document.querySelector("[data-edit-batch]")?.addEventListener("click",()=>{
+
+    // open job from list
+    document.querySelectorAll("[data-open-job]").forEach(a=>{
+      a.addEventListener("click",(e)=>{
+        e.preventDefault();
+        const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob);
+        if (t) showJobPopup(t);
+      });
+    });
+    // edit batch quick
+    document.querySelector("[data-edit-batch]")?.addEventListener("click", ()=>{
       const mix=Number(prompt("Total mix (L):",b.mix))||b.mix;
       const rem=Number(prompt("Remaining (L):",b.remaining))||b.remaining;
       const chems=prompt("Chemicals:",b.chemicals||"")||b.chemicals||"";
@@ -574,11 +636,11 @@ document.addEventListener("DOMContentLoaded", () => {
           <h3 style="margin-top:0">${t.name}</h3>
           <div class="grid two tight">
             <div><b>Type:</b> ${t.type}</div><div><b>Status:</b> ${t.status}</div>
-            <div><b>Date:</b> ${formatDateAU(t.date)}</div>
-            <div><b>Start:</b> ${t.start || "–"} · <b>Finish:</b> ${t.end || "–"}</div>
-            <div><b>Weed:</b> ${t.weed || "—"}</div><div><b>Batch:</b> ${batchLink}</div>
+            <div><b>Date:</b> ${auDate(t.date)}</div>
+            <div><b>Start:</b> ${t.start||"–"} · <b>Finish:</b> ${t.end||"–"}</div>
+            <div><b>Weed:</b> ${t.weed||"—"}</div><div><b>Batch:</b> ${batchLink}</div>
             <div class="span2"><b>Weather:</b> ${fmt(t.temp)}°C, ${fmt(t.wind)} km/h, ${t.windDir||"–"}, ${fmt(t.humidity)}%</div>
-            <div class="span2"><b>Notes:</b> ${t.notes || "—"}</div>
+            <div class="span2"><b>Notes:</b> ${t.notes||"—"}</div>
           </div>
           ${photoHtml}
           <div class="row gap end" style="margin-top:.8rem;">
@@ -592,7 +654,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const modal=document.querySelector(".modal");
     modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
 
-    document.querySelector("[data-open-batch]")?.addEventListener("click",(e)=>{ e.preventDefault(); const b=DB.batches.find(x=>x.id===t.batch); b && showBatchPopup(b); });
+    document.querySelector("[data-open-batch]")?.addEventListener("click",(e)=>{
+      e.preventDefault();
+      const b=DB.batches.find(x=>x.id===t.batch);
+      if (b) showBatchPopup(b);
+    });
     document.querySelector("[data-edit]")?.addEventListener("click",()=>{
       switchScreen("createTask");
       $("#jobName").value=t.name; $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
@@ -609,4 +675,4 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-});
+}); // DOMContentLoaded
