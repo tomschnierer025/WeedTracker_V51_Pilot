@@ -1,18 +1,18 @@
 /* === WeedTracker V60 Final Pilot — FULL apps.js ===
-   ✅ AU date format (DD-MM-YYYY) + compact code for job names
-   ✅ “Locate Me” (first) → “Auto Name” (second)
-   ✅ Weather auto-fill (temp, humidity, wind, wind dir ° + N/NE/E/SE/S/SW/W/NW)
-   ✅ “⚠ Noxious Weeds” pinned to top of list (scroll-only)
-   ✅ Records & Batches: Open pop-ups work (close on overlay / Close / Esc)
-   ✅ Map: visible, “Locate Me” control, clickable pins, Apple Maps navigation
-   ✅ SDS (Chemwatch) link pinned at top of Inventory
-   ✅ One home button per row (handled by CSS), darker theme (CSS)
-   ✅ Spinners & toasts
-   ✅ LocalStorage DB with rolling backups (3)
+   - AU date format (DD-MM-YYYY) + compact code for job names
+   - Locate Me (first) → Auto Name (second)
+   - Weather auto-fill: temp, humidity, wind, wind dir (° + compass N/NE/E/…)
+   - “⚠ noxious” weeds pinned at top (scroll-only)
+   - Records & Batches pop-ups fixed (Close / Esc / overlay)
+   - Apple Maps navigation (pins + records)
+   - SDS (Chemwatch) link pinned to top of Inventory
+   - One home button per row, darker theme (in CSS)
+   - Spinners + toasts
+   - LocalStorage DB with rolling backups
 */
 
 document.addEventListener("DOMContentLoaded", () => {
-  /* -------------------- Tiny helpers -------------------- */
+  /* ---------- helpers ---------- */
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => [...r.querySelectorAll(s)];
   const fmt = (n,d=0)=> (n==null||n==="")?"–":Number(n).toFixed(d);
@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
     s.classList[on?"add":"remove"]("active");
   };
 
-  /* -------------------- DB & seeds -------------------- */
+  /* ---------- DB ---------- */
   const STORAGE_KEY="weedtracker_data";
   const BACKUP_KEY ="weedtracker_backup";
   const MAX_BACKUPS=3;
@@ -111,19 +111,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return latest;
   };
 
-  // Offer restore if empty
   if ((!DB.tasks.length && !DB.batches.length && !DB.chems.length) && localStorage.getItem(BACKUP_KEY)){
     if (confirm("Backup found. Restore data now?")){
       const r=restoreLatest(); if (r) DB=r;
     }
   }
 
-  /* -------------------- Splash fade -------------------- */
-  const splash=$("#splash");
-  setTimeout(()=> splash?.classList.add("hide"), 1200);
-  splash?.addEventListener("transitionend", ()=> splash.remove(), {once:true});
-
-  /* -------------------- Navigation -------------------- */
+  /* ---------- navigation ---------- */
   const screens = $$(".screen");
   function switchScreen(id){
     screens.forEach(s=>s.classList.remove("active"));
@@ -134,9 +128,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (id==="mapping")  renderMap(true);
   }
   $$("[data-target]").forEach(b=> b.addEventListener("click", ()=> switchScreen(b.dataset.target)));
-  $$(".home-btn").forEach(b=> b.addEventListener("click", (e)=>{e.preventDefault(); switchScreen("home");}));
+  $$(".back").forEach(b=> b.addEventListener("click", ()=> switchScreen("home")));
 
-  /* -------------------- Settings -------------------- */
+  /* ---------- settings ---------- */
   const accountInput=$("#accountEmail");
   accountInput && (accountInput.value = DB.accountEmail || "");
   $("#saveAccount")?.addEventListener("click", ()=>{ DB.accountEmail=(accountInput.value||"").trim(); saveDB(); toast("Saved"); });
@@ -156,19 +150,16 @@ document.addEventListener("DOMContentLoaded", () => {
     toast("Cleared");
   });
 
-  /* -------------------- Create Task -------------------- */
-  // Reminder 1–52 weeks
+  /* ---------- create task ---------- */
   const remSel=$("#reminderWeeks");
   if (remSel && !remSel.options.length) for (let i=1;i<=52;i++){ const o=document.createElement("option"); o.value=o.textContent=i; remSel.appendChild(o); }
-  // Default date
   const jobDate=$("#jobDate"); if (jobDate && !jobDate.value) jobDate.value = todayISO();
-  // Task type toggles tracking UI
+
   const taskTypeSel=$("#taskType");
   const roadTrackBlock=$("#roadTrackBlock");
   const syncTrack=()=> roadTrackBlock && (roadTrackBlock.style.display = (taskTypeSel.value==="Road Spray")?"block":"none");
   taskTypeSel?.addEventListener("change", syncTrack); syncTrack();
 
-  // Locate then AutoName
   let currentRoad="";
   $("#locateBtn")?.addEventListener("click", ()=>{
     if (!navigator.geolocation){ toast("Enable Location"); return; }
@@ -190,12 +181,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const t = $("#taskType").value || "Inspection";
     const prefix = TYPE_PREFIX[t] || "I";
     const dt = jobDate && jobDate.value ? new Date(jobDate.value) : new Date();
-    const compact = formatDateAUCompact(dt); // DDMMYYYY
+    const compact = formatDateAUCompact(dt);
     const base = (currentRoad || "Unknown").replace(/\s+/g,"");
     $("#jobName").value = `${prefix}${compact}_${base}`;
   });
 
-  // Weather (temp, humidity, wind, dir° + compass)
   $("#autoWeatherBtn")?.addEventListener("click", ()=>{
     if (!navigator.geolocation){ toast("Enable Location"); return; }
     spin(true,"Fetching weather…");
@@ -215,7 +205,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }, ()=>{ spin(false); toast("Location not available"); });
   });
 
-  // Weeds: noxious pinned to top
   function populateWeeds(){
     const sel=$("#weedSelect"); if(!sel) return;
     sel.innerHTML="";
@@ -230,7 +219,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   populateWeeds();
 
-  // Batch select
   function populateBatchSelect(){
     const sel=$("#batchSelect"); if(!sel) return;
     sel.innerHTML="";
@@ -243,7 +231,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   populateBatchSelect();
 
-  // Roadside tracking
   let trackTimer=null;
   $("#startTrack")?.addEventListener("click", ()=>{
     if (!navigator.geolocation){ toast("Enable Location"); return; }
@@ -262,7 +249,6 @@ document.addEventListener("DOMContentLoaded", () => {
     $("#trackStatus").textContent="Stopped";
   });
 
-  // Photo attach
   let photoDataURL="";
   $("#photoInput")?.addEventListener("change",(e)=>{
     const f=e.target.files?.[0]; if(!f) return;
@@ -271,20 +257,19 @@ document.addEventListener("DOMContentLoaded", () => {
     rd.readAsDataURL(f);
   });
 
-  // Save Task / Draft
   $("#saveTask")?.addEventListener("click", ()=> saveTask(false));
   $("#saveDraft")?.addEventListener("click", ()=> saveTask(true));
 
   function saveTask(isDraft){
     spin(true,"Saving task…");
     const id=Date.now();
-    const status=isDraft?"Draft":($("input[name='status']:checked")?.value||"Incomplete");
+    const status=isDraft?"Draft":("Incomplete");
     const track=JSON.parse(localStorage.getItem("lastTrack")||"[]");
     const obj={
       id,
       name: $("#jobName").value.trim() || ("Task_"+id),
-      council: $("#councilNum").value.trim(),
-      linkedInspectionId: $("#linkInspectionId").value.trim(),
+      council: "",
+      linkedInspectionId: "",
       type: $("#taskType").value,
       weed: $("#weedSelect").value,
       batch: $("#batchSelect").value,
@@ -297,18 +282,11 @@ document.addEventListener("DOMContentLoaded", () => {
       coords: track,
       photo: photoDataURL || "",
       createdAt:new Date().toISOString(), archived:false,
-      road: currentRoad || ""
+      road: $("#locRoad")?.textContent || ""
     };
     const existing = DB.tasks.find(t=> t.name===obj.name);
     if (existing) Object.assign(existing,obj); else DB.tasks.push(obj);
 
-    // link & archive inspection if provided
-    if (obj.linkedInspectionId){
-      const insp=DB.tasks.find(t=> t.type==="Inspection" && (String(t.id)===obj.linkedInspectionId || t.name===obj.linkedInspectionId));
-      if (insp){ insp.archived=true; insp.status="Archived"; }
-    }
-
-    // simple batch consumption heuristic
     if (obj.batch){
       const b=DB.batches.find(x=>x.id===obj.batch);
       if (b){ const used=(obj.type==="Road Spray" && obj.coords?.length>1)?100:0;
@@ -320,7 +298,7 @@ document.addEventListener("DOMContentLoaded", () => {
     spin(false); toast("Saved");
   }
 
-  /* -------------------- Records -------------------- */
+  /* ---------- records ---------- */
   $("#recSearchBtn")?.addEventListener("click", renderRecords);
   $("#recResetBtn")?.addEventListener("click", ()=>{
     $("#recSearch").value=""; $("#recFrom").value=""; $("#recTo").value=""; $("#recType").value="All";
@@ -333,7 +311,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (to && (t.date||"")>to) return false;
     if (typ!=="All" && t.type!==typ) return false;
     if (q){
-      const hay=`${t.name} ${t.road||""} ${t.weed||""} ${t.council||""}`.toLowerCase();
+      const hay=`${t.name} ${t.road||""} ${t.weed||""}`.toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
     return true;
@@ -365,7 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderRecords();
 
-  /* -------------------- Batches -------------------- */
+  /* ---------- batches ---------- */
   $("#batSearchBtn")?.addEventListener("click", renderBatches);
   $("#batResetBtn")?.addEventListener("click", ()=>{ $("#batFrom").value=""; $("#batTo").value=""; renderBatches(); });
   $("#newBatch")?.addEventListener("click", ()=>{
@@ -391,7 +369,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderBatches();
 
-  /* -------------------- Inventory -------------------- */
+  /* ---------- inventory ---------- */
   $("#addChem")?.addEventListener("click", ()=>{
     const name=prompt("Chemical name:"); if(!name) return;
     const active=prompt("Active ingredient:","")||"";
@@ -404,7 +382,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   let _chemEditing=null;
-  $("#ce_cancel")?.addEventListener("click", ()=> $("#chemEditSheet").style.display="none");
+  $("#ce_cancel")?.addEventListener("click", ()=> $("#chemEditSheet").style.display="none"));
   $("#ce_save")?.addEventListener("click", ()=>{
     if (!_chemEditing) return;
     _chemEditing.name=$("#ce_name").value.trim();
@@ -418,7 +396,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderChems(){
     const list=$("#chemList"); if(!list) return; list.innerHTML="";
-    // SDS pinned card
     const sds=document.createElement("div");
     sds.className="item sds";
     sds.innerHTML=`<b>Safety Data Sheets (SDS)</b><br>
@@ -469,13 +446,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderChems(); renderProcurement();
 
-  /* -------------------- Mapping -------------------- */
+  /* ---------- mapping ---------- */
   let map, locateCtrl;
   function ensureMap(){
     if (map) return map;
     map = L.map("map").setView([-34.75,148.65], 10);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
-    // Locate Me control
     locateCtrl = L.control({position:"bottomright"});
     locateCtrl.onAdd = function(){
       const d=L.DomUtil.create("div","leaflet-bar");
@@ -548,15 +524,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (fit && tasks.length){
       try { m.fitBounds(group.getBounds().pad(0.2)); } catch {}
     }
-    // also draw lastTrack if present
     try{
       const last = JSON.parse(localStorage.getItem("lastTrack")||"[]");
       if (Array.isArray(last) && last.length>1) L.polyline(last,{color:"#ffda44",weight:3,opacity:.8}).addTo(m);
     }catch{}
   }
 
-  /* -------------------- Popups -------------------- */
-  document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ const m=$(".modal"); if(m) m.remove(); } });
+  /* ---------- popups ---------- */
+  document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ const m=document.querySelector(".modal"); if(m) m.remove(); } });
 
   function showBatchPopup(b){
     const jobs=DB.tasks.filter(t=>t.batch===b.id);
@@ -577,10 +552,10 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       </div>`;
     const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
-    const modal=$(".modal");
+    const modal=document.querySelector(".modal");
     modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
-    $$("[data-open-job]",modal).forEach(a=> a.addEventListener("click",(e)=>{ e.preventDefault(); const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob); t && showJobPopup(t); }));
-    $("[data-edit-batch]",modal)?.addEventListener("click",()=>{
+    document.querySelectorAll("[data-open-job]").forEach(a=> a.addEventListener("click",(e)=>{ e.preventDefault(); const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob); t && showJobPopup(t); }));
+    document.querySelector("[data-edit-batch]")?.addEventListener("click",()=>{
       const mix=Number(prompt("Total mix (L):",b.mix))||b.mix;
       const rem=Number(prompt("Remaining (L):",b.remaining))||b.remaining;
       const chems=prompt("Chemicals:",b.chemicals||"")||b.chemicals||"";
@@ -614,14 +589,13 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       </div>`;
     const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
-    const modal=$(".modal");
+    const modal=document.querySelector(".modal");
     modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
 
-    $("[data-open-batch]",modal)?.addEventListener("click",(e)=>{ e.preventDefault(); const b=DB.batches.find(x=>x.id===t.batch); b && showBatchPopup(b); });
-    $("[data-edit]",modal)?.addEventListener("click",()=>{
+    document.querySelector("[data-open-batch]")?.addEventListener("click",(e)=>{ e.preventDefault(); const b=DB.batches.find(x=>x.id===t.batch); b && showBatchPopup(b); });
+    document.querySelector("[data-edit]")?.addEventListener("click",()=>{
       switchScreen("createTask");
-      $("#jobName").value=t.name; $("#councilNum").value=t.council||""; $("#linkInspectionId").value=t.linkedInspectionId||"";
-      $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
+      $("#jobName").value=t.name; $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
       $("#weedSelect").value=t.weed||""; $("#batchSelect").value=t.batch||"";
       $("#jobDate").value=t.date||todayISO(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
       $("#temp").value=t.temp||""; $("#wind").value=t.wind||""; $("#windDir").value=t.windDir||""; $("#humidity").value=t.humidity||"";
@@ -629,7 +603,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (t.photo){ $("#photoPreview").src=t.photo; $("#photoPreview").style.display="block"; }
       modal.remove();
     });
-    $("[data-nav]",modal)?.addEventListener("click", ()=>{
+    document.querySelector("[data-nav]")?.addEventListener("click", ()=>{
       const pt = t.coords?.[0]; if(!pt){ toast("No coords saved"); return; }
       openAppleMaps(pt[0], pt[1]);
     });
