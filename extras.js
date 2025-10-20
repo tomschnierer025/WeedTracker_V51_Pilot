@@ -1,75 +1,152 @@
-/* === WeedTracker V60 Final Pilot — extras.js === */
+/* === WeedTracker V61 Final Pilot — extras.js ===
+   UI helpers: popups, spinners, Apple Maps navigation, modals, alerts
+*/
 
+// --- Spinner Controls ---
+function showSpinner(text = "Working…") {
+  const sp = document.getElementById("spinner");
+  if (!sp) return;
+  sp.textContent = text;
+  sp.classList.add("active");
+}
+function hideSpinner() {
+  const sp = document.getElementById("spinner");
+  if (!sp) return;
+  sp.classList.remove("active");
+}
+
+// --- Toast (temporary alert) ---
 function showToast(msg) {
-  const old = document.querySelector('.toast'); if (old) old.remove();
-  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
-  document.body.appendChild(el); setTimeout(() => el.remove(), 2000);
-}
-function showSpinner(msg = "Working…") { const s=document.getElementById('spinner'); s.textContent=msg; s.classList.add('active'); }
-function hideSpinner() { document.getElementById('spinner').classList.remove('active'); }
-
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  window.scrollTo(0,0);
-}
-document.addEventListener('click', e=>{ if (e.target.classList.contains('back')) showScreen('home'); });
-
-window.addEventListener('load', ()=>{ setTimeout(()=>{ document.getElementById('splash').classList.add('hide'); }, 1000); });
-
-const NOXIOUS_WEEDS = ["African Lovegrass","Blackberry","Serrated Tussock","St John’s Wort","Bathurst Burr","Chilean Needle Grass","Cape Broom"];
-function decorateWeedList(selectEl) {
-  [...selectEl.options].forEach(opt=>{
-    if (NOXIOUS_WEEDS.includes(opt.text)) { opt.text = `⚠️ ${opt.text}`; opt.style.color = "#ffcc00"; }
-  });
-  const cat = document.createElement('option'); cat.text = "🚫 Noxious Weeds (Category)"; cat.style.color = "#ff2222"; selectEl.prepend(cat);
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 1600);
 }
 
-function openAppleMaps(lat, lon) {
-  if (!lat || !lon) { showToast("No coordinates found"); return; }
-  window.open(`http://maps.apple.com/?daddr=${lat},${lon}`, '_blank');
+// --- Modal / Pop-up Window ---
+function showModal(title, body, actions = []) {
+  closeModal(); // clear any previous
+  const modal = document.createElement("div");
+  modal.className = "modal";
+
+  const card = document.createElement("div");
+  card.className = "card";
+
+  const h3 = document.createElement("h3");
+  h3.textContent = title;
+  card.appendChild(h3);
+
+  if (typeof body === "string") {
+    const p = document.createElement("div");
+    p.innerHTML = body;
+    card.appendChild(p);
+  } else if (body instanceof Node) {
+    card.appendChild(body);
+  }
+
+  const footer = document.createElement("div");
+  footer.style.marginTop = "0.8rem";
+  footer.style.textAlign = "right";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "Close";
+  closeBtn.onclick = closeModal;
+  footer.appendChild(closeBtn);
+
+  actions.forEach(a => footer.appendChild(a));
+
+  card.appendChild(footer);
+  modal.appendChild(card);
+  document.body.appendChild(modal);
 }
 
-function openPopup(title, content) {
-  const m = document.createElement('div');
-  m.className = 'modal';
-  m.innerHTML = `<div class="card p"><h3>${title}</h3><div>${content}</div>
-    <button class="pill warn closePop" style="margin-top:.8rem">Close</button></div>`;
-  document.body.appendChild(m);
-  m.querySelector('.closePop').addEventListener('click', ()=>m.remove());
-}
-function closeAllPopups() { document.querySelectorAll('.modal').forEach(m=>m.remove()); }
-
-function insertSDSLink(listEl) {
-  const sds = document.createElement('div');
-  sds.className = 'item sds';
-  sds.innerHTML = `
-    <strong>📘 Safety Data Sheets (SDS)</strong><br>
-    <a href="https://online.chemwatch.net/" target="_blank" style="color:#33cc66;">
-      Open Chemwatch
-    </a>`;
-  listEl.prepend(sds);
+function closeModal() {
+  const m = document.querySelector(".modal");
+  if (m) m.remove();
 }
 
-function ensureLabels() {
-  document.querySelectorAll('input,select,textarea').forEach(el=>{
-    const id = el.id || el.name; if (!id) return;
-    const prev = el.previousElementSibling;
-    if (prev && prev.tagName === 'LABEL') return;
-    const lbl = document.createElement('label');
-    lbl.textContent = id.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase());
-    el.parentNode.insertBefore(lbl, el);
-  });
+// --- Apple Maps Navigation ---
+function openInAppleMaps(lat, lon, name = "Location") {
+  if (!lat || !lon) {
+    showToast("No coordinates found for navigation");
+    return;
+  }
+  const url = `https://maps.apple.com/?daddr=${lat},${lon}&q=${encodeURIComponent(name)}`;
+  window.open(url, "_blank");
 }
 
-function unitIcon(unit) {
-  if (!unit) return '';
-  const u=unit.toLowerCase();
-  if (u.includes('l')) return '💧';
-  if (u.includes('g')) return '⚖️';
-  return '🧪';
+// --- Record & Batch Pop-ups ---
+function openRecordPopup(job) {
+  if (!job) return;
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <p><strong>Job Name:</strong> ${job.name}</p>
+    <p><strong>Type:</strong> ${job.type}</p>
+    <p><strong>Weed:</strong> ${job.weed}</p>
+    <p><strong>Batch:</strong> ${job.batchId || "—"}</p>
+    <p><strong>Date:</strong> ${job.date}</p>
+    <p><strong>Notes:</strong> ${job.notes || "—"}</p>
+    <div style="margin-top:0.8rem;">
+      <button id="navJob">Navigate</button>
+      <button id="editJob">Edit</button>
+    </div>
+  `;
+  showModal("Record Details", body);
+
+  document.getElementById("navJob").onclick = () => {
+    if (job.lat && job.lon) openInAppleMaps(job.lat, job.lon, job.name);
+    else showToast("No coordinates recorded");
+  };
+
+  document.getElementById("editJob").onclick = () => {
+    closeModal();
+    editJob(job.id);
+  };
 }
 
-window.showToast=showToast; window.showSpinner=showSpinner; window.hideSpinner=hideSpinner; window.showScreen=showScreen;
-window.decorateWeedList=decorateWeedList; window.openAppleMaps=openAppleMaps; window.openPopup=openPopup; window.closeAllPopups=closeAllPopups;
-window.insertSDSLink=insertSDSLink; window.ensureLabels=ensureLabels; window.unitIcon=unitIcon;
+function openBatchPopup(batch) {
+  if (!batch) return;
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <p><strong>Batch ID:</strong> ${batch.id}</p>
+    <p><strong>Date Created:</strong> ${batch.date}</p>
+    <p><strong>Total Volume:</strong> ${batch.volume || "—"} L</p>
+    <p><strong>Chemicals:</strong></p>
+    <ul>${(batch.chems || []).map(c => `<li>${c.name} – ${c.amount}</li>`).join("")}</ul>
+    <p><strong>Jobs Linked:</strong></p>
+    <ul>${(batch.jobs || []).map(j => `<li>${j}</li>`).join("")}</ul>
+  `;
+  showModal("Batch Details", body);
+}
+
+// --- Hook up click handlers ---
+document.addEventListener("click", e => {
+  const btn = e.target.closest("[data-open-job]");
+  if (btn) {
+    const id = btn.getAttribute("data-open-job");
+    const jobs = loadData(WT_KEYS.JOBS);
+    const job = jobs.find(j => j.id === id);
+    if (job) openRecordPopup(job);
+  }
+
+  const bat = e.target.closest("[data-open-batch]");
+  if (bat) {
+    const id = bat.getAttribute("data-open-batch");
+    const batches = loadData(WT_KEYS.BATCHES);
+    const b = batches.find(x => x.id === id);
+    if (b) openBatchPopup(b);
+  }
+});
+
+// --- Spinner wrapper for async ops ---
+async function withSpinner(label, fn) {
+  showSpinner(label);
+  try {
+    await fn();
+  } catch (err) {
+    alert("Error: " + err.message);
+  } finally {
+    hideSpinner();
+  }
+}
