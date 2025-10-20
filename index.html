@@ -4,8 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>WeedTracker V60 Final Pilot</title>
+
+  <!-- Styles -->
   <link rel="stylesheet" href="styles.css" />
-  <link rel="icon" href="🌿" />
+
+  <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 </head>
@@ -26,7 +29,7 @@
     <button data-target="createTask" class="home-btn">🧾 Create Task</button>
     <button data-target="records" class="home-btn">📋 Records</button>
     <button data-target="inventory" class="home-btn">🧪 Chemical Inventory</button>
-    <button data-target="batches" class="home-btn">🧴 Batches</button>
+    <button data-target="batches" class="home-btn">🧬 Batches</button>
     <button data-target="procurement" class="home-btn">🛒 Procurement List</button>
     <button data-target="mapping" class="home-btn">🗺️ Mapping</button>
     <button data-target="settings" class="home-btn">⚙️ Settings</button>
@@ -55,10 +58,16 @@
   <label>Date (DD-MM-YYYY)</label>
   <input id="jobDate" type="date"/>
 
-  <label>Start Time</label>
-  <input id="startTime" type="time"/>
-  <label>Finish Time</label>
-  <input id="endTime" type="time"/>
+  <div class="grid two tight">
+    <div>
+      <label>Start Time</label>
+      <input id="startTime" type="time"/>
+    </div>
+    <div>
+      <label>Finish Time</label>
+      <input id="endTime" type="time"/>
+    </div>
+  </div>
 
   <label>Weed Type</label>
   <select id="weedSelect"></select>
@@ -74,7 +83,7 @@
   <div class="grid four tight">
     <div><small>Temp °C</small><input id="temp" /></div>
     <div><small>Wind km/h</small><input id="wind" /></div>
-    <div><small>Dir (° + N/E/S/W)</small><input id="windDir" /></div>
+    <div><small>Dir (° + N/NE/E/…)</small><input id="windDir" /></div>
     <div><small>Humidity %</small><input id="humidity" /></div>
   </div>
 
@@ -108,7 +117,7 @@
 <!-- RECORDS -->
 <section id="records" class="screen">
   <h2>📋 Records</h2>
-  <input id="recSearch" placeholder="Search …"/>
+  <input id="recSearch" placeholder="Search by road, name, weed, council…"/>
   <div class="grid three tight">
     <div><small>From</small><input id="recFrom" type="date"/></div>
     <div><small>To</small><input id="recTo" type="date"/></div>
@@ -131,7 +140,7 @@
 
 <!-- BATCHES -->
 <section id="batches" class="screen">
-  <h2>🧴 Batches</h2>
+  <h2>🧬 Batches</h2>
   <div class="grid two tight">
     <div><small>From</small><input id="batFrom" type="date"/></div>
     <div><small>To</small><input id="batTo" type="date"/></div>
@@ -213,6 +222,7 @@
   <button class="home-btn back">🏠 Home</button>
 </section>
 
+<!-- Scripts (order matters) -->
 <script src="extras.js"></script>
 <script src="storage.js"></script>
 <script src="apps.js"></script>
