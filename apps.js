@@ -1,25 +1,26 @@
-/* === WeedTracker V60 Final Pilot — apps.js (Repair + Color Edition) ===
-   What’s in here (all completed):
-   - Buttons fixed (no dead clicks). Pop-ups for Records & Batches working.
-   - AU date format display (DD-MM-YYYY) + compact code for job names (DDMMYYYY).
-   - Locate Me (first) → Auto Name (second).
-   - Weather auto-fill (temp, humidity, wind, direction in ° + N/NE/E/…).
-   - Noxious weeds pinned to top of list (⚠) — scroll only.
-   - Apple Maps navigation from map pins and record pop-ups.
-   - “Locate Me” control on the map.
-   - SDS (Chemwatch) link is injected in Inventory by apps (pinned to top).
-   - One button per row on Home (colors are in styles.css).
-   - Spinners & toasts during save/create actions.
-   - LocalStorage DB + small rotating backups.
+/* === WeedTracker V61 Final Pilot — apps.js (Mobile build) ===
+   Completed in this drop:
+   - Buttons fixed everywhere (Records/Batches popups open; pins open)
+   - Records list now has [Open] [Edit] [Navigate]
+   - Job popup also has Edit + Navigate
+   - Home button logic intact (index places it top-right)
+   - Light basemap, Locate Me control, Apple Maps navigation
+   - Weather auto-fill (temp, humidity, wind, dir in ° + compass)
+   - Roadname search (e.g., “Wombat Road”), plus job name & weed search
+   - Weeds dropdown: 🔺 “Noxious Weeds (category)”; 🟡 triangles on NSW-listed noxious weeds; no purple/pink used
+   - SDS (Chemwatch) link pinned at top of Chemical Inventory
+   - Spinners and toasts for saves
+   - LocalStorage DB with rolling backups
 */
 
 document.addEventListener("DOMContentLoaded", () => {
-  /* ----------------- helpers ----------------- */
+  /* ---------------- helpers ---------------- */
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const todayISO = () => new Date().toISOString().split("T")[0];
   const nowTime  = () => new Date().toTimeString().slice(0,5);
   const fmt = (n,d=0)=> (n==null||n==="")?"–":Number(n).toFixed(d);
+
   const toCompass = deg => {
     if (deg==null || deg==="") return "";
     const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
@@ -39,31 +40,36 @@ document.addEventListener("DOMContentLoaded", () => {
     const yyyy = dt.getFullYear();
     return `${dd}${mm}${yyyy}`;
   };
-  const toast = (msg, ms=1600)=>{
-    const old=document.querySelector(".toast"); if(old) old.remove();
-    const d=document.createElement("div"); d.className="toast"; d.textContent=msg; document.body.appendChild(d);
-    setTimeout(()=>d.remove(),ms);
-  };
+
   const spinner = {
     on(msg="Working…"){ const s=$("#spinner"); if(!s) return; s.textContent=msg; s.classList.add("active"); },
     off(){ $("#spinner")?.classList.remove("active"); }
   };
+  const toast = (msg, ms=1400)=>{
+    const old=document.querySelector(".toast"); if(old) old.remove();
+    const d=document.createElement("div"); d.className="toast"; d.textContent=msg; document.body.appendChild(d);
+    setTimeout(()=>d.remove(),ms);
+  };
 
-  /* ----------------- DB + seeds ----------------- */
+  /* ---------------- DB & seeds ---------------- */
   const STORAGE_KEY="weedtracker_data";
   const BACKUP_KEY ="weedtracker_backup";
   const MAX_BACKUPS=3;
 
-  const NSW_WEEDS_40 = [
-    "African Boxthorn (noxious)","African Lovegrass (noxious)","Bathurst Burr (noxious)","Blackberry (noxious)",
-    "Cape Broom (noxious)","Chilean Needle Grass (noxious)","Coolatai Grass (noxious)","Fireweed (noxious)",
-    "Gorse (noxious)","Lantana (noxious)","Patterson’s Curse (noxious)","Serrated Tussock (noxious)",
-    "St John’s Wort (noxious)","Sweet Briar (noxious)","Willow spp. (noxious)",
+  // NSW-listed noxious weeds (sample 40 incl. noxious)
+  const NSW_NOXIOUS = [
+    "African Boxthorn","African Lovegrass","Bathurst Burr","Blackberry","Cape Broom",
+    "Chilean Needle Grass","Coolatai Grass","Fireweed","Gorse","Lantana",
+    "Patterson’s Curse","Serrated Tussock","St John’s Wort","Sweet Briar","Willow spp."
+  ];
+  const OTHER_WEEDS = [
     "African Feathergrass","Artichoke Thistle","Balloon Vine","Blue Heliotrope","Bridal Creeper","Caltrop",
     "Coltsfoot","Fleabane","Flax-leaf Broom","Fountain Grass","Galvanised Burr","Giant Parramatta Grass",
-    "Glycine","Green Cestrum","Horehound","Khaki Weed","Noogoora Burr","Parthenium Weed","Prickly Pear (common)",
-    "Saffron Thistle","Silverleaf Nightshade","Spear Thistle","Sweet Vernal Grass","Three-cornered Jack","Wild Radish"
+    "Glycine","Green Cestrum","Horehound","Khaki Weed","Noogoora Burr","Parthenium Weed",
+    "Prickly Pear (common)","Saffron Thistle","Silverleaf Nightshade","Spear Thistle",
+    "Sweet Vernal Grass","Three-cornered Jack","Wild Radish"
   ];
+  const ALL_WEEDS = { noxious:NSW_NOXIOUS.slice().sort(), other:OTHER_WEEDS.slice().sort() };
 
   const DEFAULT_CHEMS = [
     {name:"Crucial",   active:"Glyphosate 540 g/L",   containerSize:20, containerUnit:"L", containers:4, threshold:2},
@@ -76,6 +82,20 @@ document.addEventListener("DOMContentLoaded", () => {
     {name:"Outright",  active:"Fluroxypyr",           containerSize:20, containerUnit:"L", containers:1, threshold:1}
   ];
 
+  function ensureDB(){
+    let db;
+    try{ db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }catch{ db = {}; }
+    db.version ??= 61;
+    db.accountEmail ??= "";
+    db.tasks ??= [];
+    db.batches ??= [];
+    db.chems ??= [];
+    db.procurement ??= [];
+    db.weeds ??= { noxious: ALL_WEEDS.noxious, other: ALL_WEEDS.other };
+    if (!db.chems.length) db.chems = DEFAULT_CHEMS.slice();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    return db;
+  }
   function saveDB(withBackup=true){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
     if (!withBackup) return;
@@ -86,20 +106,6 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
     }catch{}
   }
-  function ensureDB(){
-    let db;
-    try{ db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }catch{ db = {}; }
-    db.version ??= 60;
-    db.accountEmail ??= "";
-    db.tasks ??= [];
-    db.batches ??= [];
-    db.chems ??= [];
-    db.procurement ??= [];
-    db.weeds ??= NSW_WEEDS_40.slice();
-    if (!db.chems.length) db.chems = DEFAULT_CHEMS.slice();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    return db;
-  }
   function restoreLatest(){
     const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
     if (!arr.length) return null;
@@ -109,57 +115,43 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   let DB = ensureDB();
 
-  // Offer restore if everything empty but backups exist
   if ((!DB.tasks.length && !DB.batches.length && !DB.chems.length) && localStorage.getItem(BACKUP_KEY)){
     if (confirm("Backup found. Restore data now?")){
-      const r=restoreLatest();
-      if (r){ DB=r; }
+      const r=restoreLatest(); if (r) DB=r;
     }
   }
 
-  /* ----------------- splash fade ----------------- */
+  /* ---------------- splash fade ---------------- */
   const splash=$("#splash");
   if (splash){
-    setTimeout(()=> splash.classList.add("hide"), 900);
+    setTimeout(()=> splash.classList.add("hide"), 800);
     splash.addEventListener("transitionend", ()=> splash.remove(), {once:true});
   }
 
-  /* ----------------- navigation ----------------- */
+  /* ---------------- navigation ---------------- */
   const screens = $$(".screen");
   function switchScreen(id){
     screens.forEach(s=>s.classList.remove("active"));
     $("#"+id)?.classList.add("active");
-
-    // lazy renders
     if (id==="records")   renderRecords();
     if (id==="batches")   renderBatches();
     if (id==="inventory") { renderChems(); renderProcurement(); }
     if (id==="mapping")   renderMap(true);
   }
-  // Primary nav buttons
-  $$("[data-target]").forEach(b=>{
-    b.addEventListener("click", ()=> switchScreen(b.dataset.target));
+  $$("[data-target]").forEach(b=> b.addEventListener("click", ()=> switchScreen(b.dataset.target)));
+  document.body.addEventListener("click",(e)=>{ // fail-safe
+    const el=e.target.closest("[data-target]"); if(el){ e.preventDefault(); switchScreen(el.dataset.target); }
   });
-  // Back to home
   $$(".back").forEach(b=> b.addEventListener("click", ()=> switchScreen("home")));
 
-  // Failsafe: if any nav button was missed by the browser cache, rebind on body
-  document.body.addEventListener("click",(e)=>{
-    const el=e.target.closest("[data-target]");
-    if (el){ e.preventDefault(); switchScreen(el.dataset.target); }
-  });
-
-  /* ----------------- settings ----------------- */
+  /* ---------------- settings / data ---------------- */
   const accountInput=$("#accountEmail");
   if (accountInput) accountInput.value = DB.accountEmail || "";
-  $("#saveAccount")?.addEventListener("click", ()=>{
-    DB.accountEmail = (accountInput.value||"").trim();
-    saveDB(false); toast("Saved");
-  });
+  $("#saveAccount")?.addEventListener("click", ()=>{ DB.accountEmail=(accountInput.value||"").trim(); saveDB(false); toast("Saved"); });
   $("#exportBtn")?.addEventListener("click", ()=>{
     const blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a"); a.href=url; a.download="weedtracker_data.json"; a.click();
+    const url=URL.createObjectURL(blob); const a=document.createElement("a");
+    a.href=url; a.download="weedtracker_data.json"; a.click();
   });
   $("#restoreBtn")?.addEventListener("click", ()=>{
     const r=restoreLatest();
@@ -174,25 +166,21 @@ document.addEventListener("DOMContentLoaded", () => {
     toast("Cleared");
   });
 
-  /* ----------------- create task ----------------- */
-  // Reminder (1–52 weeks)
+  /* ---------------- create task ---------------- */
   const remSel=$("#reminderWeeks");
   if (remSel && !remSel.options.length) for (let i=1;i<=52;i++){ const o=document.createElement("option"); o.value=o.textContent=i; remSel.appendChild(o); }
 
-  // Ensure date control set (ISO for input)
-  const jobDate=$("#jobDate"); if (jobDate && !jobDate.value) jobDate.value = todayISO();
+  const jobDate=$("#jobDate"); if (jobDate && !jobDate.value) jobDate.value=todayISO();
 
-  // Show roadside tracking only for Road Spray
   const taskTypeSel=$("#taskType");
   const roadTrackBlock=$("#roadTrackBlock");
-  const trackVis = ()=>{ if (roadTrackBlock) roadTrackBlock.style.display = (taskTypeSel.value==="Road Spray")?"block":"none"; };
+  const trackVis=()=>{ if(roadTrackBlock) roadTrackBlock.style.display = (taskTypeSel.value==="Road Spray")?"block":"none"; };
   taskTypeSel?.addEventListener("change", trackVis); trackVis();
 
-  // Locate Me then Auto Name
+  // Locate first → then AutoName
   const locateBtn=$("#locateBtn");
   const locRoad=$("#locRoad");
   let currentRoad="";
-
   locateBtn?.addEventListener("click", ()=>{
     if (!navigator.geolocation){ toast("Enable location services"); return; }
     spinner.on("Locating…");
@@ -205,22 +193,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }catch{
         currentRoad = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
       }
-      if (locRoad) locRoad.textContent = currentRoad || "Unknown";
+      if (locRoad) locRoad.textContent=currentRoad || "Unknown";
       spinner.off();
     }, ()=>{ spinner.off(); toast("GPS failed"); });
   });
-
   const TYPE_PREFIX={Inspection:"I","Spot Spray":"SS","Road Spray":"RS"};
   $("#autoNameBtn")?.addEventListener("click", ()=>{
     const t = $("#taskType").value || "Inspection";
     const prefix = TYPE_PREFIX[t] || "I";
     const dt = jobDate && jobDate.value ? new Date(jobDate.value) : new Date();
-    const code = auDateCompact(dt);
-    const base = (currentRoad||"Unknown").replace(/\s+/g,"");
-    $("#jobName").value = `${prefix}${code}_${base}`;
+    $("#jobName").value = `${prefix}${auDateCompact(dt)}_${(currentRoad||"Unknown").replace(/\s+/g,"")}`;
   });
 
-  // Weather auto-fill
+  // Weather
   $("#autoWeatherBtn")?.addEventListener("click", ()=>{
     if (!navigator.geolocation){ toast("Enable location services"); return; }
     spinner.on("Fetching weather…");
@@ -231,8 +216,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const r=await fetch(url); const j=await r.json(); const c=j.current||{};
         $("#temp").value     = c.temperature_2m ?? "";
         $("#wind").value     = c.wind_speed_10m ?? "";
-        const wdir = c.wind_direction_10m;
-        $("#windDir").value  = (wdir!=null ? `${wdir}° (${toCompass(wdir)})` : "");
+        const wdir=c.wind_direction_10m;
+        $("#windDir").value  = (wdir!=null? `${wdir}° (${toCompass(wdir)})` : "");
         $("#humidity").value = c.relative_humidity_2m ?? "";
         $("#wxUpdated").textContent = "Updated @ " + nowTime();
       }catch{ toast("Weather unavailable"); }
@@ -240,24 +225,46 @@ document.addEventListener("DOMContentLoaded", () => {
     }, ()=>{ spinner.off(); toast("Location not available"); });
   });
 
-  // Populate weeds (noxious first)
+  // Weeds dropdown: 🔺 category + 🟡 individual NSW-listed, then others
   function populateWeeds(){
     const sel=$("#weedSelect"); if (!sel) return;
     sel.innerHTML="";
-    const def=document.createElement("option"); def.value=""; def.textContent="— Select Weed —"; sel.appendChild(def);
-    const nox=DB.weeds.filter(w=>/noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
-    const rest=DB.weeds.filter(w=>! /noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
-    [...nox, ...rest].forEach(w=>{
+    // Category for multiple noxious weeds selection
+    const cat=document.createElement("option");
+    cat.value="Noxious Weeds (category)"; cat.textContent="🔺 Noxious Weeds (category)";
+    sel.appendChild(cat);
+
+    // Divider-like disabled option (visual only)
+    const sep=document.createElement("option");
+    sep.textContent="──────────"; sep.disabled=true; sel.appendChild(sep);
+
+    // NSW noxious first (🟡)
+    ALL_WEEDS.noxious.forEach(name=>{
       const o=document.createElement("option");
-      o.value=w; o.textContent = /noxious/i.test(w) ? `⚠ ${w}` : w;
+      o.value=name; o.textContent=`🟡 ${name}`;
       sel.appendChild(o);
     });
+
+    // Divider
+    const sep2=document.createElement("option");
+    sep2.textContent="──────────"; sep2.disabled=true; sel.appendChild(sep2);
+
+    // Others (plain)
+    ALL_WEEDS.other.forEach(name=>{
+      const o=document.createElement("option");
+      o.value=name; o.textContent=`${name}`;
+      sel.appendChild(o);
+    });
+
+    // default top placeholder
+    const def=document.createElement("option");
+    def.value=""; def.textContent="— Select Weed —"; sel.insertBefore(def, sel.firstChild);
   }
   populateWeeds();
 
-  // Populate batches select
+  // Batch select
   function populateBatchSelect(){
-    const sel=$("#batchSelect"); if (!sel) return;
+    const sel=$("#batchSelect"); if(!sel) return;
     sel.innerHTML="";
     const def=document.createElement("option"); def.value=""; def.textContent="— Select Batch —"; sel.appendChild(def);
     DB.batches.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(b=>{
@@ -268,7 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   populateBatchSelect();
 
-  // Roadside tracking
+  // Road tracking
   let trackTimer=null;
   $("#startTrack")?.addEventListener("click", ()=>{
     if (!navigator.geolocation){ toast("Enable location services"); return; }
@@ -287,7 +294,7 @@ document.addEventListener("DOMContentLoaded", () => {
     $("#trackStatus").textContent="Stopped";
   });
 
-  // Photo upload
+  // Photo
   let photoDataURL="";
   $("#photoInput")?.addEventListener("change",(e)=>{
     const f=e.target.files?.[0]; if(!f) return;
@@ -296,24 +303,22 @@ document.addEventListener("DOMContentLoaded", () => {
     rd.readAsDataURL(f);
   });
 
-  // Save task / draft
+  // Save job / draft
   $("#saveTask")?.addEventListener("click", ()=> saveTask(false));
   $("#saveDraft")?.addEventListener("click", ()=> saveTask(true));
 
   function saveTask(isDraft){
     spinner.on("Saving task…");
     const id=Date.now();
-    const status=isDraft?"Draft":"Incomplete";
+    const status=isDraft?"Draft":($("input[name='status']:checked")?.value || "Incomplete");
     const track=JSON.parse(localStorage.getItem("lastTrack")||"[]");
     const obj={
       id,
       name: $("#jobName").value.trim() || ("Task_"+id),
-      council: "",
-      linkedInspectionId: "",
       type: $("#taskType").value,
       weed: $("#weedSelect").value,
       batch: $("#batchSelect").value,
-      date: $("#jobDate").value || todayISO(), // stored ISO
+      date: $("#jobDate").value || todayISO(),
       start: $("#startTime").value || "",
       end:   $("#endTime").value   || "",
       temp: $("#temp").value, wind: $("#wind").value, windDir: $("#windDir").value, humidity: $("#humidity").value,
@@ -327,7 +332,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const existing = DB.tasks.find(t=> t.name===obj.name);
     if (existing) Object.assign(existing,obj); else DB.tasks.push(obj);
 
-    // consume batch a little on Road Spray as heuristic
     if (obj.batch){
       const b=DB.batches.find(x=>x.id===obj.batch);
       if (b){ const used=(obj.type==="Road Spray" && obj.coords?.length>1)?100:0;
@@ -339,7 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
     spinner.off(); toast("Saved");
   }
 
-  /* ----------------- records ----------------- */
+  /* ---------------- records ---------------- */
   $("#recSearchBtn")?.addEventListener("click", renderRecords);
   $("#recResetBtn")?.addEventListener("click", ()=>{
     $("#recSearch").value=""; $("#recFrom").value=""; $("#recTo").value="";
@@ -372,9 +376,11 @@ document.addEventListener("DOMContentLoaded", () => {
         d.innerHTML=`<b>${t.name}</b><br><small>${t.type} • ${auDate(t.date)} • ${t.status}</small>
           <div class="row end">
             <button class="pill" data-open="${t.id}">Open</button>
+            <button class="pill" data-edit="${t.id}">Edit</button>
             ${t.coords?.length?`<button class="pill" data-nav="${t.id}">Navigate</button>`:""}
           </div>`;
         d.querySelector("[data-open]")?.addEventListener("click", ()=> showJobPopup(t));
+        d.querySelector("[data-edit]")?.addEventListener("click", ()=> editJob(t));
         const nb=d.querySelector("[data-nav]");
         nb && nb.addEventListener("click", ()=>{
           const pt=t.coords?.[0]; if(!pt){ toast("No coords"); return; }
@@ -385,7 +391,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderRecords();
 
-  /* ----------------- batches ----------------- */
+  function editJob(t){
+    switchScreen("createTask");
+    $("#jobName").value=t.name; $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
+    $("#weedSelect").value=t.weed||""; $("#batchSelect").value=t.batch||"";
+    $("#jobDate").value=t.date||todayISO(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
+    $("#temp").value=t.temp||""; $("#wind").value=t.wind||""; $("#windDir").value=t.windDir||""; $("#humidity").value=t.humidity||"";
+    $("#notes").value=t.notes||"";
+    if (t.photo){ $("#photoPreview").src=t.photo; $("#photoPreview").style.display="block"; }
+  }
+
+  /* ---------------- batches ---------------- */
   $("#batSearchBtn")?.addEventListener("click", renderBatches);
   $("#batResetBtn")?.addEventListener("click", ()=>{ $("#batFrom").value=""; $("#batTo").value=""; renderBatches(); });
   $("#newBatch")?.addEventListener("click", ()=>{
@@ -412,7 +428,45 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderBatches();
 
-  /* ----------------- inventory (with SDS pinned link) ----------------- */
+  function showBatchPopup(b){
+    const jobs=DB.tasks.filter(t=>t.batch===b.id);
+    const jobsHtml= jobs.length ? `<ul>${jobs.map(t=>`<li><a href="#" data-open-job="${t.id}">${t.name}</a></li>`).join("")}</ul>` : "—";
+    const html=`
+      <div class="modal">
+        <div class="card p">
+          <h3 style="margin-top:0">${b.id}</h3>
+          <div><b>Date:</b> ${auDate(b.date)||"–"} · <b>Time:</b> ${b.time||"–"}</div>
+          <div><b>Total Mix Made:</b> ${fmt(b.mix)} L</div>
+          <div><b>Total Mix Remaining:</b> ${fmt(b.remaining)} L</div>
+          <div style="margin-top:.4rem;"><b>Chemicals (made of):</b><br>${b.chemicals||"—"}</div>
+          <div style="margin-top:.4rem;"><b>Linked Jobs:</b><br>${jobsHtml}</div>
+          <div class="row gap end" style="margin-top:.8rem;">
+            <button class="pill" data-edit-batch>Edit</button>
+            <button class="pill warn" data-close>Close</button>
+          </div>
+        </div>
+      </div>`;
+    const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
+    const modal=document.querySelector(".modal");
+    modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
+
+    document.querySelectorAll("[data-open-job]").forEach(a=>{
+      a.addEventListener("click",(e)=>{
+        e.preventDefault();
+        const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob);
+        if (t) showJobPopup(t);
+      });
+    });
+    document.querySelector("[data-edit-batch]")?.addEventListener("click", ()=>{
+      const mix=Number(prompt("Total mix (L):",b.mix))||b.mix;
+      const rem=Number(prompt("Remaining (L):",b.remaining))||b.remaining;
+      const chems=prompt("Chemicals:",b.chemicals||"")||b.chemicals||"";
+      b.mix=mix; b.remaining=rem; b.chemicals=chems; b.time ||= nowTime();
+      saveDB(); modal.remove(); renderBatches(); populateBatchSelect();
+    });
+  }
+
+  /* ---------------- inventory (+ SDS pinned) ---------------- */
   $("#addChem")?.addEventListener("click", ()=>{
     const name=prompt("Chemical name:"); if(!name) return;
     const active=prompt("Active ingredient:","")||"";
@@ -440,11 +494,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderChems(){
     const list=$("#chemList"); if(!list) return; list.innerHTML="";
-    // SDS link pinned at top
+    // SDS link pinned
     const sds=document.createElement("div");
     sds.className="item sds";
     sds.innerHTML=`<b>Safety Data Sheets (SDS)</b><br>
-      <a class="pill" target="_blank" rel="noopener" href="https://online.chemwatch.net/">Open Chemwatch</a>`;
+      <a class="pill" target="_blank" rel="noopener" href="https://jr.chemwatch.net/chemwatch.web/account/hilltops">Open Chemwatch</a>`;
     list.appendChild(sds);
 
     DB.chems.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{
@@ -482,7 +536,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderProcurement(){
     const ul=$("#procList"); if(!ul) return; ul.innerHTML="";
     DB.chems.forEach(c=>{
-      if (c.threshold && (c.containers||0)<c.threshold){
+      if (c.threshold && (c.containers||0) < c.threshold){
         const li=document.createElement("li");
         li.textContent=`Low stock: ${c.name} (${c.containers||0} < ${c.threshold})`;
         ul.appendChild(li);
@@ -491,25 +545,26 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   renderChems(); renderProcurement();
 
-  /* ----------------- mapping ----------------- */
+  /* ---------------- mapping ---------------- */
   let map, locateCtrl;
   function ensureMap(){
     if (map) return map;
     map = L.map("map").setView([-34.75,148.65], 10);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
+    // Light, high-visibility basemap
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19, attribution:false}).addTo(map);
 
-    // Locate Me control
-    locateCtrl = L.control({position:"bottomright"});
+    // Locate Me control (bottom-right)
+    locateCtrl=L.control({position:"bottomright"});
     locateCtrl.onAdd=function(){
       const d=L.DomUtil.create("div","leaflet-bar");
-      Object.assign(d.style,{background:"#0c7d2b",color:"#fff",borderRadius:"6px",padding:"6px 10px",cursor:"pointer"});
+      Object.assign(d.style,{background:"#0c7d2b",color:"#fff",borderRadius:"6px",padding:"6px 10px",cursor:"pointer",boxShadow:"0 2px 6px rgba(0,0,0,.25)"});
       d.innerText="Locate Me";
       d.onclick=()=>{
         if (!navigator.geolocation){ toast("Enable location"); return; }
         navigator.geolocation.getCurrentPosition(p=>{
           const pt=[p.coords.latitude,p.coords.longitude];
           map.setView(pt, 14);
-          L.circleMarker(pt,{radius:7,opacity:.9}).addTo(map).bindPopup("You are here").openPopup();
+          L.circleMarker(pt,{radius:7,opacity:.95}).addTo(map).bindPopup("You are here").openPopup();
         });
       };
       return d;
@@ -533,7 +588,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderMap(fit=false){
     const m=ensureMap();
-    // clear non-tile layers
+    // remove all non-tiles
     m.eachLayer(l=>{ if (!(l instanceof L.TileLayer)) m.removeLayer(l); });
 
     const from=$("#mapFrom").value||""; const to=$("#mapTo").value||"";
@@ -552,16 +607,19 @@ document.addEventListener("DOMContentLoaded", () => {
       if (t.coords?.length>1) group.addLayer(L.polyline(t.coords,{color:"yellow",weight:4,opacity:.9}));
       const pt=t.coords?.[0] || [-34.75 + Math.random()*0.08, 148.65 + Math.random()*0.08];
       const thumb=t.photo ? `<br><img src="${t.photo}" style="max-width:180px;border-radius:6px;margin-top:.3rem">` : "";
-      const openId=`open_${t.id}`; const navId=`nav_${t.id}`;
+      const openId=`open_${t.id}`; const navId=`nav_${t.id}`; const editId=`edit_${t.id}`;
       const popup=`<b>${t.name}</b><br>${t.type} • ${auDate(t.date)}${thumb}
                    <br><button id="${openId}" class="pill" style="margin-top:.35rem">Open</button>
-                   <button id="${navId}" class="pill" style="margin-top:.35rem;margin-left:.4rem">Navigate</button>`;
+                   <button id="${editId}" class="pill" style="margin-top:.35rem;margin-left:.35rem">Edit</button>
+                   <button id="${navId}" class="pill" style="margin-top:.35rem;margin-left:.35rem">Navigate</button>`;
       const marker=L.marker(pt); marker.bindPopup(popup);
       marker.on("popupopen", ()=>{
         setTimeout(()=>{
           const ob=document.getElementById(openId);
+          const eb=document.getElementById(editId);
           const nb=document.getElementById(navId);
           if (ob) ob.onclick = ()=> showJobPopup(t);
+          if (eb) eb.onclick = ()=> editJob(t);
           if (nb) nb.onclick = ()=> openAppleMaps(pt[0], pt[1]);
         },0);
       });
@@ -572,7 +630,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (fit && tasks.length){
       try{ m.fitBounds(group.getBounds().pad(0.2)); }catch{}
     }
-    // show last tracked line (quick visual)
+    // last tracked poly
     try{
       const last=JSON.parse(localStorage.getItem("lastTrack")||"[]");
       if (Array.isArray(last) && last.length>1){
@@ -581,50 +639,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch{}
   }
 
-  /* ----------------- popups ----------------- */
+  /* ---------------- popups ---------------- */
   document.addEventListener("keydown",(e)=>{
     if (e.key==="Escape"){ const m=document.querySelector(".modal"); if(m) m.remove(); }
   });
-
-  function showBatchPopup(b){
-    const jobs=DB.tasks.filter(t=>t.batch===b.id);
-    const jobsHtml= jobs.length ? `<ul>${jobs.map(t=>`<li><a href="#" data-open-job="${t.id}">${t.name}</a></li>`).join("")}</ul>` : "—";
-    const html=`
-      <div class="modal">
-        <div class="card p">
-          <h3 style="margin-top:0">${b.id}</h3>
-          <div><b>Date:</b> ${auDate(b.date)||"–"} · <b>Time:</b> ${b.time||"–"}</div>
-          <div><b>Total Mix Made:</b> ${fmt(b.mix)} L</div>
-          <div><b>Total Mix Remaining:</b> ${fmt(b.remaining)} L</div>
-          <div style="margin-top:.4rem;"><b>Chemicals (made of):</b><br>${b.chemicals||"—"}</div>
-          <div style="margin-top:.4rem;"><b>Linked Jobs:</b><br>${jobsHtml}</div>
-          <div class="row gap end" style="margin-top:.8rem;">
-            <button class="pill" data-edit-batch>Edit</button>
-            <button class="pill warn" data-close>Close</button>
-          </div>
-        </div>
-      </div>`;
-    const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
-    const modal=document.querySelector(".modal");
-    modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
-
-    // open job from list
-    document.querySelectorAll("[data-open-job]").forEach(a=>{
-      a.addEventListener("click",(e)=>{
-        e.preventDefault();
-        const t=DB.tasks.find(x=> String(x.id)===a.dataset.openJob);
-        if (t) showJobPopup(t);
-      });
-    });
-    // edit batch quick
-    document.querySelector("[data-edit-batch]")?.addEventListener("click", ()=>{
-      const mix=Number(prompt("Total mix (L):",b.mix))||b.mix;
-      const rem=Number(prompt("Remaining (L):",b.remaining))||b.remaining;
-      const chems=prompt("Chemicals:",b.chemicals||"")||b.chemicals||"";
-      b.mix=mix; b.remaining=rem; b.chemicals=chems; b.time ||= nowTime();
-      saveDB(); modal.remove(); renderBatches(); populateBatchSelect();
-    });
-  }
 
   function showJobPopup(t){
     const batchLink = t.batch ? `<a href="#" data-open-batch="${t.batch}">${t.batch}</a>` : "—";
@@ -659,16 +677,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const b=DB.batches.find(x=>x.id===t.batch);
       if (b) showBatchPopup(b);
     });
-    document.querySelector("[data-edit]")?.addEventListener("click",()=>{
-      switchScreen("createTask");
-      $("#jobName").value=t.name; $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
-      $("#weedSelect").value=t.weed||""; $("#batchSelect").value=t.batch||"";
-      $("#jobDate").value=t.date||todayISO(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
-      $("#temp").value=t.temp||""; $("#wind").value=t.wind||""; $("#windDir").value=t.windDir||""; $("#humidity").value=t.humidity||"";
-      $("#notes").value=t.notes||"";
-      if (t.photo){ $("#photoPreview").src=t.photo; $("#photoPreview").style.display="block"; }
-      modal.remove();
-    });
+    document.querySelector("[data-edit]")?.addEventListener("click",()=>{ editJob(t); modal.remove(); });
     document.querySelector("[data-nav]")?.addEventListener("click", ()=>{
       const pt = t.coords?.[0]; if(!pt){ toast("No coords saved"); return; }
       openAppleMaps(pt[0], pt[1]);
