@@ -1,75 +1,128 @@
-/* === WeedTracker V61 Pilot — extras.js ===
-   Shared helpers (DOM, formatting, splash, spinner, toast, debounce, Apple Maps)
-*/
+/* === WeedTracker V60 Final Pilot — extras.js === */
 
-// DOM
-const $  = (sel, root=document) => root.querySelector(sel);
-const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
-
-// Numbers
-const fmt = (n, d=0) => (n==null || n==="") ? "–" : Number(n).toFixed(d);
-
-// Dates
-function formatDateAU(d){
-  const dt = (d instanceof Date) ? d : new Date(d);
-  const dd = String(dt.getDate()).padStart(2,"0");
-  const mm = String(dt.getMonth()+1).padStart(2,"0");
-  const yy = dt.getFullYear();
-  return `${dd}-${mm}-${yy}`;
-}
-function formatDateAUCompact(d){
-  const dt = (d instanceof Date) ? d : new Date(d);
-  const dd = String(dt.getDate()).padStart(2,"0");
-  const mm = String(dt.getMonth()+1).padStart(2,"0");
-  const yy = dt.getFullYear();
-  return `${dd}${mm}${yy}`;
-}
-const todayISO = () => new Date().toISOString().split("T")[0];
-const nowTime  = () => new Date().toTimeString().slice(0,5);
-
-// Toast
-function toast(msg, ms=1800){
-  const el=document.createElement("div");
-  el.textContent=msg;
-  Object.assign(el.style,{
-    position:"fixed",bottom:"1.2rem",left:"50%",transform:"translateX(-50%)",
-    background:"#e9fbe9",color:"#064d1e",fontWeight:800,
-    padding:".55rem .95rem",borderRadius:"999px",
-    border:"1px solid #cfe9cf",boxShadow:"0 2px 8px rgba(0,0,0,.25)",zIndex:9999
-  });
+// 🌿 Toast / Notifications
+function showToast(msg) {
+  const old = document.querySelector('.toast');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(()=>el.remove(),ms);
+  setTimeout(() => el.remove(), 2000);
 }
 
-// Spinner
-function setSpinner(active,text="Working…"){
-  let sp=$("#spinner");
-  if(!sp){
-    sp=document.createElement("div");
-    sp.id="spinner"; sp.className="spinner"; sp.textContent=text;
-    document.body.appendChild(sp);
+// 🌿 Spinner control
+function showSpinner(msg = "Saving…") {
+  const spin = document.getElementById('spinner');
+  spin.textContent = msg;
+  spin.classList.add('active');
+}
+function hideSpinner() {
+  document.getElementById('spinner').classList.remove('active');
+}
+
+// 🌿 Screen switching
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// 🌿 Back buttons
+document.addEventListener('click', e=>{
+  if (e.target.classList.contains('back')) showScreen('home');
+});
+
+// 🌿 Splash fade
+window.addEventListener('load', ()=>{
+  setTimeout(()=>{
+    document.getElementById('splash').classList.add('hide');
+  }, 1000);
+});
+
+// 🌿 Noxious weed color tagging
+const NOXIOUS_WEEDS = [
+  "African Lovegrass","Blackberry","Serrated Tussock","St John’s Wort","Bathurst Burr",
+  "Chilean Needle Grass","Cape Broom"
+];
+function decorateWeedList(selectEl) {
+  [...selectEl.options].forEach(opt=>{
+    if (NOXIOUS_WEEDS.includes(opt.text)) {
+      opt.text = `⚠️ ${opt.text}`;
+      opt.style.color = "#ffcc00";
+    }
+  });
+  const cat = document.createElement('option');
+  cat.text = "🚫 Noxious Weeds (Category)";
+  cat.style.color = "#ff2222";
+  selectEl.prepend(cat);
+}
+
+// 🌿 Apple Maps navigation
+function openAppleMaps(lat, lon) {
+  if (!lat || !lon) {
+    showToast("No coordinates found");
+    return;
   }
-  sp.textContent=text;
-  sp.classList[active?"add":"remove"]("active");
+  const url = `http://maps.apple.com/?daddr=${lat},${lon}`;
+  window.open(url, '_blank');
 }
 
-// Splash hide helper (optional)
-function hideSplash(){
-  const s=$("#splash");
-  if(!s) return;
-  setTimeout(()=> s.classList.add("hide"), 900);
-  s.addEventListener("transitionend", ()=> s.remove(), {once:true});
+// 🌿 Pop-up utility
+function openPopup(title, content) {
+  const m = document.createElement('div');
+  m.className = 'modal';
+  m.innerHTML = `<div class="card p"><h3>${title}</h3><div>${content}</div>
+    <button class="pill warn closePop" style="margin-top:.8rem">Close</button></div>`;
+  document.body.appendChild(m);
+  m.querySelector('.closePop').addEventListener('click', ()=>m.remove());
+}
+function closeAllPopups() {
+  document.querySelectorAll('.modal').forEach(m=>m.remove());
 }
 
-// Apple Maps navigation
-function openAppleMaps(lat, lon){
-  const mapsURL=`maps://?daddr=${lat},${lon}&dirflg=d`;
-  const webURL =`https://maps.apple.com/?daddr=${lat},${lon}&dirflg=d`;
-  const a=document.createElement("a"); a.href=mapsURL; document.body.appendChild(a); a.click();
-  setTimeout(()=>{ window.open(webURL,"_blank"); a.remove(); },300);
+// 🌿 SDS link pinned item
+function insertSDSLink(listEl) {
+  const sds = document.createElement('div');
+  sds.className = 'item sds';
+  sds.innerHTML = `
+    <strong>📘 Safety Data Sheets (SDS)</strong><br>
+    <a href="https://www.safeplacensw.com.au/sds" target="_blank" style="color:#33cc66;">
+      View Chemical SDS Library
+    </a>`;
+  listEl.prepend(sds);
 }
 
-// Debounce
-function debounce(fn, delay=400){
-  let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), delay); };
+// 🌿 Auto-label all boxes
+function ensureLabels() {
+  document.querySelectorAll('input,select,textarea').forEach(el=>{
+    const id = el.id || el.name;
+    if (!id) return;
+    const prev = el.previousElementSibling;
+    if (prev && prev.tagName === 'LABEL') return;
+    const lbl = document.createElement('label');
+    lbl.textContent = id.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase());
+    el.parentNode.insertBefore(lbl, el);
+  });
 }
+
+// 🌿 Dummy example: Add emoji for chemical units
+function unitIcon(unit) {
+  if (!unit) return '';
+  if (unit.toLowerCase().includes('l')) return '💧';
+  if (unit.toLowerCase().includes('g')) return '⚖️';
+  return '🧪';
+}
+
+// 🌿 Exports
+window.showToast = showToast;
+window.showSpinner = showSpinner;
+window.hideSpinner = hideSpinner;
+window.showScreen = showScreen;
+window.decorateWeedList = decorateWeedList;
+window.openAppleMaps = openAppleMaps;
+window.openPopup = openPopup;
+window.closeAllPopups = closeAllPopups;
+window.insertSDSLink = insertSDSLink;
+window.ensureLabels = ensureLabels;
+window.unitIcon = unitIcon;
