@@ -1,156 +1,64 @@
-/* WeedTracker V60 Final Pilot — apps.js (FULL)
-   Mobile-first. AU date display. All fixes included:
-   - Home button + nav working (handled in index; also wired here)
-   - Popups for Records & Batches open reliably (and close)
-   - Edit/Delete buttons work
-   - Save spinner shows & hides correctly
-   - “Locate Me” first, then Auto Name, then Council Job #
-   - Weather pulls Temp / Humidity / Wind (km/h) / Direction (° + NESW)
-   - Roadside tracking start/stop (5s sampling)
-   - Search by road/name/weed/council/batch
-   - Map pins + polylines + Navigate (Apple Maps)
-   - Noxious weeds pinned at top (🔺 category + 🔶 markers)
-   - Link Existing Job + Link Inspection (archives inspection)
-   - Inventory units L / mL / g / kg supported (via editor in UI)
-   - Rolling backups via storage.js
+/* WeedTracker V61 Final Pilot — apps.js
+   - Core app logic (records, tasks, weather, map, popups)
+   - AU dates, Apple Maps nav, noxious weeds + Cape Broom
+   - Big spinner overlay for Save/Create
 */
+(function(){
+  const $  = (s, r=document)=> r.querySelector(s);
+  const $$ = (s, r=document)=> [...r.querySelectorAll(s)];
 
-document.addEventListener("DOMContentLoaded", () => {
-  // -------------------- Utilities --------------------
-  const $  = (s, r=document) => r.querySelector(s);
-  const $$ = (s, r=document) => [...r.querySelectorAll(s)];
-  const spinner = $("#spinner");
+  let DB = DBStore.ensureDB();
 
-  const toastHost = $("#toastHost");
-  function toast(msg, ms=1500) {
-    const d = document.createElement("div");
-    d.textContent = msg;
-    toastHost.appendChild(d);
-    setTimeout(() => d.remove(), ms);
-  }
-  const spin = (on) => {
-    if (!spinner) return;
-    spinner.classList[on ? "add" : "remove"]("active");
-  };
-
-  // Dates (AU display)
-  const todayISO = () => new Date().toISOString().split("T")[0];
-  const nowTime  = () => new Date().toTimeString().slice(0,5);
-  function formatDateAU(d) {
-    const dt = (d instanceof Date) ? d : new Date(d);
-    const dd = String(dt.getDate()).padStart(2, "0");
-    const mm = String(dt.getMonth()+1).padStart(2, "0");
-    const yyyy = dt.getFullYear();
-    return `${dd}-${mm}-${yyyy}`; // e.g. 16-10-2025
-  }
-  function formatDateAUCompact(d) {
-    const dt = (d instanceof Date) ? d : new Date(d);
-    const dd = String(dt.getDate()).padStart(2, "0");
-    const mm = String(dt.getMonth()+1).padStart(2, "0");
-    const yyyy = dt.getFullYear();
-    return `${dd}${mm}${yyyy}`; // e.g. 16102025
-  }
-  const fmt = (n,d=0)=> (n==null||n==="")?"–":Number(n).toFixed(d);
-
-  // -------------------- Database ---------------------
-  // storage.js provides: loadDB, saveDB, backupDB, etc.
-  let DB = loadDB();
-
-  // Seed weeds (40; noxious tagged)
-  const NSW_WEEDS_40 = [
-    "African Boxthorn (noxious)","African Lovegrass (noxious)","Bathurst Burr (noxious)","Blackberry (noxious)",
-    "Cape Broom (noxious)","Chilean Needle Grass (noxious)","Coolatai Grass (noxious)","Fireweed (noxious)",
-    "Gorse (noxious)","Lantana (noxious)","Patterson’s Curse (noxious)","Serrated Tussock (noxious)",
-    "St John’s Wort (noxious)","Sweet Briar (noxious)","Willow spp. (noxious)",
-    "African Feathergrass","Artichoke Thistle","Balloon Vine","Blue Heliotrope","Bridal Creeper","Caltrop",
-    "Coltsfoot","Fleabane","Flax-leaf Broom","Fountain Grass","Galvanised Burr","Giant Parramatta Grass",
-    "Glycine","Green Cestrum","Horehound","Khaki Weed","Noogoora Burr","Parthenium Weed","Prickly Pear (common)",
-    "Saffron Thistle","Silverleaf Nightshade","Spear Thistle","Sweet Vernal Grass","Three-cornered Jack","Wild Radish"
-  ];
-  if (!Array.isArray(DB.weeds) || DB.weeds.length === 0) {
-    DB.weeds = NSW_WEEDS_40.slice();
-    saveDB(DB, false);
-  }
-
-  // Basic chemicals if empty (names only; full editing is in UI)
-  if (!Array.isArray(DB.chems)) DB.chems = [];
-  if (DB.chems.length === 0) {
-    DB.chems = [
-      {name:"Crucial",active:"Glyphosate 540 g/L",containerSize:20,containerUnit:"L",containers:4,threshold:2},
-      {name:"SuperWet",active:"Non-ionic surfactant",containerSize:20,containerUnit:"L",containers:1,threshold:1},
-      {name:"Bow Saw 600",active:"Triclopyr 600 g/L",containerSize:1,containerUnit:"L",containers:2,threshold:1},
-    ];
-    saveDB(DB, false);
-  }
-
-  // -------------------- Navigation -------------------
-  const screens = $$(".screen");
-  function switchScreen(id) {
-    screens.forEach(s => s.classList.remove("active"));
+  // ---------- Nav ----------
+  function switchScreen(id){
+    $$(".screen").forEach(s=>s.classList.remove("active"));
     $("#"+id)?.classList.add("active");
-    if (id==="records")  renderRecords();
-    if (id==="batches")  renderBatches();
-    if (id==="chemicals") renderChems();
-    if (id==="procure")   renderProcurement();
-    if (id==="mapping")   renderMap(true);
+    if (id==="records") renderRecords();
+    if (id==="batches") renderBatchesMini();
+    if (id==="inventory") renderChems();
+    if (id==="mapping") renderMap(true);
   }
-  // Home buttons everywhere
-  $("#homeBtn")?.addEventListener("click", (e)=>{ e.preventDefault(); switchScreen("home"); });
-  $$("[data-target]").forEach(b => b.addEventListener("click", () => switchScreen(b.dataset.target)));
+  $$("[data-target]").forEach(btn=> btn.addEventListener("click", ()=> switchScreen(btn.dataset.target)));
+  $$(".home-btn").forEach(b=> b.addEventListener("click", ()=> switchScreen("home")));
 
-  // -------------------- Settings ---------------------
-  const accountInput=$("#accountEmail");
-  if (accountInput) accountInput.value = DB.accountEmail || "";
-  $("#saveAccount")?.addEventListener("click", ()=>{
-    DB.accountEmail = (accountInput.value||"").trim();
-    saveDB(DB);
-    toast("Saved");
-  });
-  $("#exportBtn")?.addEventListener("click", exportDB);
-  $("#restoreBtn")?.addEventListener("click", ()=>{
-    const r=restoreLatestBackup();
-    if (r){ DB = r; renderRecords(); renderBatches(); renderChems(); renderProcurement(); renderMap(true); }
-  });
-  $("#clearBtn")?.addEventListener("click", ()=>{
-    const fresh = clearDB();
-    if (fresh){ DB=fresh; renderRecords(); renderBatches(); renderChems(); renderProcurement(); renderMap(true); }
-  });
-
-  // Auto-restore offer when empty
-  autoRestoreIfEmpty();
-
-  // -------------------- Create Task ------------------
-  // Reminder weeks
-  const remSel=$("#reminderWeeks");
-  if (remSel && !remSel.options.length) {
-    for (let i=1;i<=52;i++){ const o=document.createElement("option"); o.value=o.textContent=i; remSel.appendChild(o); }
+  // ---------- Weather ----------
+  function setNESW(deg){
+    if (deg==null || deg==="") return "";
+    const dirs = ["N","NE","E","SE","S","SW","W","NW"];
+    const ix = Math.round(((Number(deg)%360)/45))%8;
+    return dirs[ix];
   }
+  $("#autoWeatherBtn")?.addEventListener("click", ()=>{
+    if (!navigator.geolocation){ _WTToast("Enable location services"); return; }
+    navigator.geolocation.getCurrentPosition(async pos=>{
+      try{
+        const {latitude, longitude} = pos.coords;
+        const url=`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`;
+        const r=await fetch(url); const j=await r.json(); const c=j.current||{};
+        $("#temp").value     = c.temperature_2m ?? "";
+        $("#wind").value     = c.wind_speed_10m ?? "";
+        $("#windDir").value  = (c.wind_direction_10m ?? "") + (c.wind_direction_10m!=null?`° ${setNESW(c.wind_direction_10m)}`:"");
+        $("#humidity").value = c.relative_humidity_2m ?? "";
+        $("#wxUpdated").textContent = "Updated @ " + new Date().toTimeString().slice(0,5);
+      }catch{ _WTToast("Weather unavailable"); }
+    }, ()=> _WTToast("Location not available"));
+  });
 
-  // Type controls visibility of Roadside tracking panel
-  const taskTypeSel=$("#taskType");
-  const roadTrackBlock=$("#roadTrackBlock");
-  function syncTrackVis(){ if(roadTrackBlock) roadTrackBlock.style.display = (taskTypeSel.value==="Road Spray")?"block":"none"; }
-  taskTypeSel?.addEventListener("change", syncTrackVis);
-
-  // Locate first (road name), then Auto-name
-  const locateBtn=$("#locateBtn");
-  const locRoad=$("#locRoad");
-  let currentRoad = "Unknown";
-  locateBtn?.addEventListener("click", ()=>{
-    if (!navigator.geolocation){ toast("Enable location"); return; }
-    spin(true);
+  // ---------- Locate + Auto name ----------
+  let currentRoad = "";
+  $("#locateBtn")?.addEventListener("click", ()=>{
+    _WTOverlay.show("Locating…");
+    if (!navigator.geolocation){ _WTOverlay.hide(); _WTToast("Enable location"); return; }
     navigator.geolocation.getCurrentPosition(async pos=>{
       const {latitude:lat, longitude:lon} = pos.coords;
       try{
-        const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
-        const j=await r.json();
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+        const j = await r.json();
         currentRoad = j.address?.road || j.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      }catch{
-        currentRoad = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      }
-      locRoad.textContent = currentRoad;
-      spin(false);
-    }, ()=>{ spin(false); toast("GPS failed"); });
+      }catch{ currentRoad = `${lat.toFixed(5)}, ${lon.toFixed(5)}`; }
+      $("#locRoad").textContent = currentRoad || "Unknown";
+      _WTOverlay.hide();
+    }, ()=>{ _WTOverlay.hide(); _WTToast("GPS failed"); });
   });
 
   const TYPE_PREFIX = { "Inspection":"I", "Spot Spray":"SS", "Road Spray":"RS" };
@@ -159,102 +67,53 @@ document.addEventListener("DOMContentLoaded", () => {
     const prefix = TYPE_PREFIX[t] || "I";
     const dInput = $("#jobDate");
     const dt = dInput && dInput.value ? new Date(dInput.value) : new Date();
-    const dateCompact = formatDateAUCompact(dt); // DDMMYYYY
+    const dd = String(dt.getDate()).padStart(2,"0");
+    const mm = String(dt.getMonth()+1).padStart(2,"0");
+    const yyyy = dt.getFullYear();
+    const dateCompact = `${dd}${mm}${yyyy}`; // AU
     const base = (currentRoad || "Unknown").replace(/\s+/g,"");
     $("#jobName").value = `${prefix}${dateCompact}_${base}`;
   });
+  if ($("#jobDate") && !$("#jobDate").value) $("#jobDate").value = DBStore.auDateISO();
 
-  // Ensure initial date is set
-  const jobDateEl = $("#jobDate");
-  if (jobDateEl && !jobDateEl.value) jobDateEl.value = todayISO();
-
-  // Weather (open-meteo current) + wind direction to compass
-  function degToCompass(deg){
-    if (deg==null || deg==="") return "";
-    const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
-    const i = Math.round((deg%360)/22.5) % 16;
-    return dirs[i];
-  }
-  $("#autoWeatherBtn")?.addEventListener("click", ()=>{
-    if (!navigator.geolocation){ toast("Enable location services"); return; }
-    navigator.geolocation.getCurrentPosition(async pos=>{
-      try{
-        const {latitude, longitude} = pos.coords;
-        const url=`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`;
-        const r=await fetch(url);
-        const j=await r.json();
-        const c=j.current||{};
-        $("#temp").value     = c.temperature_2m ?? "";
-        $("#humidity").value = c.relative_humidity_2m ?? "";
-        $("#wind").value     = c.wind_speed_10m ?? "";
-        const dirDeg = c.wind_direction_10m ?? "";
-        const dirTxt = dirDeg!=="" ? `${dirDeg}° ${degToCompass(dirDeg)}` : "";
-        $("#windDir").value  = dirTxt;
-        $("#wxUpdated").textContent = "Updated @ " + nowTime();
-        toast("Weather updated");
-      }catch(e){ console.warn(e); toast("Weather unavailable"); }
-    }, ()=> toast("Location not available"));
-  });
-
-  // Populate weeds (pin noxious at top)
+  // ---------- Weeds (pin noxious + Cape Broom) ----------
   function populateWeeds(){
     const sel=$("#weedSelect"); if (!sel) return;
     sel.innerHTML="";
-    // category selector pinned
-    const cat = document.createElement("option");
-    cat.value = "NOXIOUS WEEDS";
-    cat.textContent = "🔺 NOXIOUS WEEDS";
-    sel.appendChild(cat);
-    // build two groups
-    const nox = DB.weeds.filter(w=>/noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
-    const rest= DB.weeds.filter(w=>! /noxious/i.test(w)).sort((a,b)=>a.localeCompare(b));
-    // add noxious with yellow triangle
-    nox.forEach(w=>{
+    const list = DB.weeds.slice();
+    const noxCat = list.filter(w=>/Noxious Weeds \(category\)/i.test(w));
+    const noxInd = list.filter(w=>/noxious\)/i.test(w) && !/category/i.test(w)).sort();
+    const others = list.filter(w=>!(/noxious\)/i.test(w)) && !/category/i.test(w)).sort();
+    const top = ["— Select Weed —",
+      ...noxCat.map(w=>"🔺 "+w),       // red (semantic, via text badge)
+      ...noxInd.map(w=>"🔶 "+w),       // yellow triangle
+      ...others
+    ];
+    top.forEach(w=>{
       const o=document.createElement("option");
-      o.value=w;
-      o.textContent = `🔶 ${w}`;
-      sel.appendChild(o);
-    });
-    // divider-like disabled option
-    const div = document.createElement("option");
-    div.disabled = true; div.textContent = "──────────";
-    sel.appendChild(div);
-    // rest
-    rest.forEach(w=>{
-      const o=document.createElement("option");
-      o.value=w;
+      o.value = (w==="— Select Weed —")? "" : w.replace(/^🔺 |^🔶 /,"");
       o.textContent = w;
       sel.appendChild(o);
     });
   }
   populateWeeds();
 
-  // Populate batch select
-  function populateBatchSelect(){
-    const sel=$("#batchSelect"); if (!sel) return;
-    sel.innerHTML="";
-    const def=document.createElement("option");
-    def.value=""; def.textContent="— Select Batch —"; sel.appendChild(def);
-    (DB.batches||[]).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(b=>{
-      const o=document.createElement("option");
-      const remain = b.remaining ?? b.mix ?? 0;
-      o.value=b.id; o.textContent=`${b.id} • ${formatDateAU(b.date)} • remain ${fmt(remain)} L`;
-      sel.appendChild(o);
-    });
-  }
-  populateBatchSelect();
+  // ---------- Photo ----------
+  let photoDataURL="";
+  $("#photoInput")?.addEventListener("change", (e)=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    const reader=new FileReader();
+    reader.onload=()=>{ photoDataURL=String(reader.result||""); const img=$("#photoPreview"); img.src=photoDataURL; img.style.display="block"; };
+    reader.readAsDataURL(f);
+  });
 
-  // Roadside tracking
+  // ---------- Road tracking ----------
   let tracking=false, trackTimer=null, trackCoords=[];
   $("#startTrack")?.addEventListener("click", ()=>{
     trackCoords=[]; tracking=true; $("#trackStatus").textContent="Tracking…";
     if (trackTimer) clearInterval(trackTimer);
-    if (!navigator.geolocation){ toast("Enable location"); return; }
-    trackTimer=setInterval(()=> navigator.geolocation.getCurrentPosition(p=> {
-      trackCoords.push([p.coords.latitude, p.coords.longitude]);
-      // keep last 200 points to limit memory
-      if (trackCoords.length>200) trackCoords.shift();
-    }), 5000);
+    if (!navigator.geolocation){ _WTToast("Enable location"); return; }
+    trackTimer = setInterval(()=> navigator.geolocation.getCurrentPosition(p=> trackCoords.push([p.coords.latitude,p.coords.longitude])), 5000);
   });
   $("#stopTrack")?.addEventListener("click", ()=>{
     tracking=false; if (trackTimer) clearInterval(trackTimer);
@@ -262,317 +121,272 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.setItem("lastTrack", JSON.stringify(trackCoords));
   });
 
-  // Photo upload preview
-  let photoDataURL="";
-  $("#photoInput")?.addEventListener("change",(e)=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    const reader=new FileReader();
-    reader.onload=()=>{
-      photoDataURL=String(reader.result||"");
-      const img=$("#photoPreview");
-      img.src=photoDataURL; img.style.display="block";
-    };
-    reader.readAsDataURL(f);
-  });
-
-  // Save Task / Draft
+  // ---------- Save Task ----------
   $("#saveTask")?.addEventListener("click", ()=> saveTask(false));
   $("#saveDraft")?.addEventListener("click", ()=> saveTask(true));
 
   function saveTask(isDraft){
-    spin(true);
-    try{
-      const id=Date.now();
-      const status=isDraft?"Draft":($("input[name='status']:checked")?.value||"Incomplete");
-      const obj={
-        id,
-        name: $("#jobName").value.trim() || ("Task_"+id),
-        council: $("#councilNum").value.trim(),
-        linkedJobId: $("#linkJobId").value.trim(),
-        linkedInspectionId: $("#linkInspectionId").value.trim(),
-        type: $("#taskType").value,
-        weed: $("#weedSelect").value,
-        batch: $("#batchSelect").value,
-        date: $("#jobDate").value || todayISO(), // ISO store
-        start: $("#startTime").value || "",
-        end:   $("#endTime").value   || "",
-        temp: $("#temp").value, wind: $("#wind").value, windDir: $("#windDir").value, humidity: $("#humidity").value,
-        reminder: $("#reminderWeeks").value || "",
-        status, notes: $("#notes").value || "",
-        coords: trackCoords.slice(),
-        roadName: currentRoad || "Unknown",
-        photo: photoDataURL || "",
-        createdAt:new Date().toISOString(),
-        archived:false
-      };
+    _WTOverlay.show("💾 Saving Job…");
+    const id=Date.now();
+    const status=isDraft?"Draft":($("input[name='status']:checked")?.value||"Incomplete");
+    const obj={
+      id,
+      name: $("#jobName").value.trim() || ("Task_"+id),
+      council: $("#councilNum").value.trim(),
+      linkedJobId: $("#linkJobId").value.trim(),
+      linkedInspectionId: $("#linkInspectionId").value.trim(),
+      type: $("#taskType").value,
+      weed: $("#weedSelect").value,
+      batch: $("#batchSelect").value,
+      date: $("#jobDate").value || DBStore.auDateISO(),
+      start: $("#startTime").value || "",
+      end:   $("#endTime").value   || "",
+      temp: $("#temp").value, wind: $("#wind").value, windDir: $("#windDir").value, humidity: $("#humidity").value,
+      reminder: $("#reminderWeeks").value || "",
+      status, notes: $("#notes").value || "",
+      coords: trackCoords.slice(),
+      photo: photoDataURL || "",
+      createdAt:new Date().toISOString(), archived:false
+    };
 
-      // update existing if same name
-      const existing = (DB.tasks||[]).find(t=> t.name===obj.name);
-      if (existing) Object.assign(existing, obj); else {
-        DB.tasks ||= []; DB.tasks.push(obj);
-      }
+    const existing = DB.tasks.find(t=> t.name===obj.name);
+    if (existing) Object.assign(existing, obj); else DB.tasks.push(obj);
 
-      // link to existing job if provided (cross reference)
-      if (obj.linkedJobId){
-        const tgt = DB.tasks.find(t=> (String(t.id)===obj.linkedJobId || t.name===obj.linkedJobId));
-        if (tgt){
-          tgt.linkedJobId = obj.name;
-          obj.linkedJobId = tgt.name;
-        }
-      }
-
-      // link inspection: archive the inspection record
-      if (obj.linkedInspectionId){
-        const insp = DB.tasks.find(t=> t.type==="Inspection" && (String(t.id)===obj.linkedInspectionId || t.name===obj.linkedInspectionId));
-        if (insp){ insp.archived=true; insp.status="Archived"; obj.linkedInspectionResolved=true; }
-      }
-
-      // consume batch: heuristic for road spray
-      if (obj.batch){
-        const b = (DB.batches||[]).find(x=> x.id===obj.batch);
-        if (b){
-          const used = (obj.type==="Road Spray" && obj.coords?.length>1) ? 100 : 0; // simple default
-          b.used = (Number(b.used)||0) + used;
-          b.remaining = Math.max(0, (Number(b.mix)||0) - (Number(b.used)||0));
-        }
-      }
-      saveDB(DB);
-
-      // refresh lists/selects
-      populateBatchSelect();
-      renderRecords();
-      renderMap();
-
-      // Reset transient UI states
-      setTimeout(()=>{ spin(false); toast("Saved"); }, 350);
-    }catch(e){
-      console.error(e);
-      spin(false);
-      toast("Save failed");
+    // Link inspection (archive)
+    if (obj.linkedInspectionId){
+      const insp = DB.tasks.find(t=> t.type==="Inspection" && (String(t.id)===obj.linkedInspectionId || t.name===obj.linkedInspectionId));
+      if (insp){ insp.archived=true; insp.status="Archived"; obj.linkedInspectionResolved=true; }
     }
+
+    // Batch consume heuristic for road
+    if (obj.batch){
+      const b=DB.batches.find(x=>x.id===obj.batch);
+      if (b){
+        const used = (obj.type==="Road Spray" && obj.coords?.length>1) ? 100 : 0;
+        b.used = (b.used||0)+used;
+        b.remaining = Math.max(0, (Number(b.mix)||0) - (b.used||0));
+        b.lastEdited = new Date().toISOString();
+      }
+    }
+
+    DBStore.saveDB(DB);
+    populateBatchSelect();
+    renderRecords();
+    setTimeout(()=>{
+      _WTOverlay.show("✅ Job Saved");
+      setTimeout(()=> _WTOverlay.hide(), 1200);
+    }, 200);
   }
 
-  // -------------------- Records ---------------------
+  // ---------- Records ----------
   $("#recSearchBtn")?.addEventListener("click", renderRecords);
   $("#recResetBtn")?.addEventListener("click", ()=>{
     $("#recSearch").value=""; $("#recFrom").value=""; $("#recTo").value="";
-    $("#recType").value="All";
+    ["fInspection","fSpot","fRoad","fComplete","fIncomplete","fDraft"].forEach(id=>{$("#"+id).checked=false;});
     renderRecords();
   });
 
-  function recordMatches(t, q, from, to, typeSel){
+  function recordMatches(t,q,from,to,types,statuses){
     if (t.archived) return false;
-    if (from && (t.date||"") < from) return false;
-    if (to && (t.date||"")   > to)   return false;
-
-    // free text includes road/name/weed/council/batch/notes
+    if (from && (t.date||"")<from) return false;
+    if (to && (t.date||"")>to) return false;
     if (q){
-      const hay = `${t.name} ${t.roadName||""} ${t.weed||""} ${t.council||""} ${t.batch||""} ${t.notes||""}`.toLowerCase();
+      const hay=`${t.name} ${t.weed} ${t.council} ${t.batch} ${t.notes}`.toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
-    if (typeSel && typeSel!=="All" && t.type!==typeSel) return false;
-    return true;
+    const typeOK=( (!types.inspection && !types.spot && !types.road)
+                   || (t.type==="Inspection"&&types.inspection)
+                   || (t.type==="Spot Spray"&&types.spot)
+                   || (t.type==="Road Spray"&&types.road) );
+    if (!typeOK) return false;
+
+    const s=t.status||"Incomplete";
+    const statusesEmpty = !statuses.complete && !statuses.incomplete && !statuses.draft;
+    const statusOK = statusesEmpty || (s==="Complete"&&statuses.complete) || (s==="Incomplete"&&statuses.incomplete) || (s==="Draft"&&statuses.draft);
+    return statusOK;
   }
 
   function renderRecords(){
-    const list=$("#recordsList"); if (!list) return; list.innerHTML="";
-    const q=($("#recSearch").value||"").trim();
-    const from=$("#recFrom").value||"";
-    const to=$("#recTo").value||"";
-    const typeSel=$("#recType").value||"All";
+    const list=$("#recordsList"); if(!list) return; list.innerHTML="";
+    const q=$("#recSearch").value.trim();
+    const from=$("#recFrom").value; const to=$("#recTo").value;
+    const types={inspection:$("#fInspection").checked, spot:$("#fSpot").checked, road:$("#fRoad").checked};
+    const statuses={complete:$("#fComplete").checked, incomplete:$("#fIncomplete").checked, draft:$("#fDraft").checked};
 
-    (DB.tasks||[])
-      .filter(t=>recordMatches(t,q,from,to,typeSel))
+    DB.tasks.filter(t=>recordMatches(t,q,from,to,types,statuses))
       .sort((a,b)=>(b.date||"").localeCompare(a.date||""))
       .forEach(t=>{
         const d=document.createElement("div"); d.className="item";
-        const dateAU = formatDateAU(t.date);
-        d.innerHTML = `
-          <b>${t.name}</b><br>
-          <small>${t.type} • ${dateAU} • ${t.status}</small>
-          <div class="row gap end" style="margin-top:.4rem;">
+        const dateAU = DBStore.fmtAU(t.date);
+        d.innerHTML=`<b>${t.name}</b><br><small>${t.type} • ${dateAU} • ${t.status}</small>
+          <div class="row end">
             <button class="pill" data-open="${t.id}">Open</button>
             <button class="pill" data-edit="${t.id}">Edit</button>
-            <button class="pill warn" data-del="${t.id}">Delete</button>
             ${t.coords && t.coords.length ? `<button class="pill" data-nav="${t.id}">Navigate</button>` : ""}
           </div>`;
-        // wire buttons
-        d.querySelector(`[data-open="${t.id}"]`)?.addEventListener("click", ()=> showJobPopup(t));
-        d.querySelector(`[data-edit="${t.id}"]`)?.addEventListener("click", ()=>{
+        d.querySelector("[data-open]")?.addEventListener("click", ()=> showJobPopup(t));
+        d.querySelector("[data-edit]")?.addEventListener("click", ()=>{
           switchScreen("createTask");
-          // push values into form
-          $("#jobName").value=t.name; $("#councilNum").value=t.council||"";
-          $("#linkJobId").value=t.linkedJobId||""; $("#linkInspectionId").value=t.linkedInspectionId||"";
+          $("#jobName").value=t.name; $("#councilNum").value=t.council||""; $("#linkJobId").value=t.linkedJobId||""; $("#linkInspectionId").value=t.linkedInspectionId||"";
           $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
           $("#weedSelect").value=t.weed||""; $("#batchSelect").value=t.batch||"";
-          $("#jobDate").value=t.date||todayISO(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
+          $("#jobDate").value=t.date||DBStore.auDateISO(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
           $("#temp").value=t.temp||""; $("#wind").value=t.wind||""; $("#windDir").value=t.windDir||""; $("#humidity").value=t.humidity||"";
           $("#notes").value=t.notes||"";
           if (t.photo){ $("#photoPreview").src=t.photo; $("#photoPreview").style.display="block"; }
         });
-        d.querySelector(`[data-del="${t.id}"]`)?.addEventListener("click", ()=>{
-          if (!confirm("Delete this record?")) return;
-          DB.tasks = (DB.tasks||[]).filter(x=> x!==t);
-          saveDB(DB); renderRecords(); renderMap();
-        });
-        d.querySelector(`[data-nav="${t.id}"]`)?.addEventListener("click", ()=>{
-          const pt = t.coords?.[0]; if(!pt){ toast("No coords saved"); return; }
-          openAppleMaps(pt[0], pt[1]);
-        });
+        const navBtn = d.querySelector("[data-nav]");
+        if (navBtn){
+          navBtn.addEventListener("click", ()=>{
+            const pt = t.coords?.[0];
+            if (!pt){ _WTToast("No coords saved"); return; }
+            openAppleMaps(pt[0], pt[1]);
+          });
+        }
         list.appendChild(d);
       });
   }
   renderRecords();
 
-  // -------------------- Batches ---------------------
-  $("#batSearchBtn")?.addEventListener("click", renderBatches);
-  $("#batResetBtn")?.addEventListener("click", ()=>{ $("#batFrom").value=""; $("#batTo").value=""; renderBatches(); });
-  $("#newBatch")?.addEventListener("click", ()=>{
-    const id = "B"+Date.now();
-    const mix = Number(prompt("Total mix (L):","600"))||0;
-    const chems= prompt("Chemicals (e.g. 'Crucial 1.5L/100L, Wetter 300mL/100L')","")||"";
-    const obj = { id, date:todayISO(), time:nowTime(), mix, remaining:mix, used:0, chemicals:chems };
-    DB.batches ||= []; DB.batches.push(obj);
-    // optional: deduct inventory roughly (1 container per listed component)
-    try{
-      const parts = chems.split(",").map(s=>s.trim()).filter(Boolean);
-      parts.forEach(p=>{
-        const name = p.split(/\s+/)[0];
-        const c = (DB.chems||[]).find(x=> x.name.toLowerCase()===name.toLowerCase());
-        if (c){ c.containers = Math.max(0,(Number(c.containers)||0)-1); }
-      });
-    }catch{}
-    saveDB(DB); populateBatchSelect(); renderBatches();
-    toast("Batch created");
-  });
-
-  function renderBatches(){
-    const list=$("#batchList"); if (!list) return; list.innerHTML="";
-    const from=$("#batFrom").value||""; const to=$("#batTo").value||"";
-    (DB.batches||[])
-      .filter(b=>(!from||b.date>=from)&&(!to||b.date<=to))
-      .sort((a,b)=>(b.date||"").localeCompare(a.date||""))
-      .forEach(b=>{
-        const item=document.createElement("div"); item.className="item";
-        item.innerHTML = `
-          <b>${b.id}</b><br>
-          <small>${formatDateAU(b.date)} • Total ${fmt(b.mix)} L • Remaining ${fmt(b.remaining)} L</small>
-          <div class="row gap end" style="margin-top:.4rem;">
-            <button class="pill" data-open="${b.id}">Open</button>
-            <button class="pill" data-edit="${b.id}">Edit</button>
-            <button class="pill warn" data-del="${b.id}">Delete</button>
-          </div>`;
-        item.querySelector(`[data-open="${b.id}"]`)?.addEventListener("click", ()=> showBatchPopup(b));
-        item.querySelector(`[data-edit="${b.id}"]`)?.addEventListener("click", ()=>{
-          const mix=Number(prompt("Total mix (L):",b.mix))||b.mix;
-          const rem=Number(prompt("Remaining (L):",b.remaining))||b.remaining;
-          const chems=prompt("Chemicals:",b.chemicals||"")||b.chemicals||"";
-          b.mix=mix; b.remaining=rem; b.chemicals=chems; b.time ||= nowTime();
-          saveDB(DB); renderBatches(); populateBatchSelect();
-        });
-        item.querySelector(`[data-del="${b.id}"]`)?.addEventListener("click", ()=>{
-          if (!confirm("Delete this batch?")) return;
-          DB.batches = (DB.batches||[]).filter(x=> x!==b);
-          saveDB(DB); renderBatches(); populateBatchSelect();
-        });
-        list.appendChild(item);
-      });
+  // Expose popup for batches.js
+  window.showJobPopup = function(t){
+    const batchLink = t.batch ? `<a href="#" data-open-batch="${t.batch}">${t.batch}</a>` : "—";
+    const linkedInsp = t.linkedInspectionId ? `<a href="#" data-open-insp="${t.linkedInspectionId}">${t.linkedInspectionId}</a>` : "—";
+    const photoHtml = t.photo ? `<div style="margin:.4rem 0"><img src="${t.photo}" alt="photo" style="max-width:100%;border-radius:8px"/></div>` : "";
+    const hasPt = t.coords && t.coords.length;
+    const m=document.createElement("div");
+    m.className="modal";
+    m.innerHTML=`
+      <div class="card p" style="position:fixed;left:12px;right:12px;top:12%;z-index:1300">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3 style="margin:0">${t.name}</h3>
+          <button class="pill warn" data-close-modal>❌ Close</button>
+        </div>
+        <div class="grid two tight" style="margin-top:.4rem">
+          <div><b>Type:</b> ${t.type}</div><div><b>Status:</b> ${t.status}</div>
+          <div><b>Date:</b> ${DBStore.fmtAU(t.date)}</div>
+          <div><b>Start:</b> ${t.start || "–"} · <b>Finish:</b> ${t.end || "–"}</div>
+          <div><b>Weed:</b> ${t.weed || "—"}</div><div><b>Batch:</b> ${batchLink}</div>
+          <div><b>Linked Inspection:</b> ${linkedInsp}</div><div><b>Reminder:</b> ${t.reminder || "—"} wk</div>
+          <div class="span2"><b>Weather:</b> ${t.temp||"–"}°C, ${t.wind||"–"} km/h, ${t.windDir||"–"}, ${t.humidity||"–"}%</div>
+          <div class="span2"><b>Notes:</b> ${t.notes || "—"}</div>
+        </div>
+        ${photoHtml}
+        <div class="row gap end" style="margin-top:.8rem;">
+          ${hasPt? `<button class="pill" data-nav>Navigate</button>`:""}
+          <button class="pill" data-edit>Edit</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+    m.addEventListener("click",(e)=>{
+      if (e.target.dataset.closeModal!=null) m.remove();
+      if (e.target?.dataset?.nav!=null){
+        const pt = t.coords?.[0]; if(!pt){ _WTToast("No coords saved"); return; }
+        openAppleMaps(pt[0], pt[1]);
+      }
+      if (e.target?.dataset?.edit!=null){
+        m.remove();
+        switchScreen("createTask");
+        $("#jobName").value=t.name; $("#councilNum").value=t.council||""; $("#linkJobId").value=t.linkedJobId||""; $("#linkInspectionId").value=t.linkedInspectionId||"";
+        $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
+        $("#weedSelect").value=t.weed||""; $("#batchSelect").value=t.batch||"";
+        $("#jobDate").value=t.date||DBStore.auDateISO(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
+        $("#temp").value=t.temp||""; $("#wind").value=t.wind||""; $("#windDir").value=t.windDir||""; $("#humidity").value=t.humidity||"";
+        $("#notes").value=t.notes||"";
+        if (t.photo){ $("#photoPreview").src=t.photo; $("#photoPreview").style.display="block"; }
+      }
+      const b = e.target.closest("[data-open-batch]");
+      if (b){
+        const bb = DB.batches.find(x=>x.id===t.batch);
+        if (bb && window.openBatch) window.openBatch(bb);
+      }
+      const i = e.target.closest("[data-open-insp]");
+      if (i){
+        const insp=DB.tasks.find(x=>x.type==="Inspection"&&(String(x.id)===t.linkedInspectionId||x.name===t.linkedInspectionId));
+        if (insp){ m.remove(); window.showJobPopup(insp); }
+      }
+    });
   }
-  renderBatches();
 
-  // -------------------- Inventory -------------------
+  // ---------- Batches mini (selector) ----------
+  function populateBatchSelect(){
+    const sel=$("#batchSelect"); if (!sel) return;
+    sel.innerHTML=""; const def=document.createElement("option");
+    def.value=""; def.textContent="— Select Batch —"; sel.appendChild(def);
+    DB.batches.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).forEach(b=>{
+      const o=document.createElement("option");
+      const remain = (b.remaining ?? b.mix ?? 0);
+      o.value=b.id; o.textContent=`${b.id} • ${DBStore.fmtAU(b.date)} • remain ${remain} L`;
+      sel.appendChild(o);
+    });
+  }
+  populateBatchSelect();
+
+  // ---------- Inventory ----------
+  $("#sdsLink")?.addEventListener("click", ()=>{}); // pinned SDS link in HTML
   $("#addChem")?.addEventListener("click", ()=>{
-    const name=prompt("Chemical name:"); if(!name) return;
-    const active=prompt("Active ingredient:","")||"";
-    const size=Number(prompt("Container size (number):","20"))||0;
-    const unit=prompt("Unit (L, mL, g, kg):","L")||"L";
-    const count=Number(prompt("How many containers:","0"))||0;
-    const thr=Number(prompt("Reorder threshold (containers):","0"))||0;
-    DB.chems ||= [];
+    const name = prompt("Chemical name:"); if(!name) return;
+    const active= prompt("Active ingredient:","")||"";
+    const size  = Number(prompt("Container size (number):","20"))||0;
+    const unit  = prompt("Unit (L, mL, g, kg):","L")||"L";
+    const count = Number(prompt("How many containers:","0"))||0;
+    const thr   = Number(prompt("Reorder threshold (containers):","0"))||0;
     DB.chems.push({name,active,containerSize:size,containerUnit:unit,containers:count,threshold:thr});
-    saveDB(DB); renderChems(); renderProcurement();
-  });
-
-  let _chemEditing=null;
-  function openChemEditor(c){
-    _chemEditing = c;
-    $("#ce_name").value = c.name || "";
-    $("#ce_active").value = c.active || "";
-    $("#ce_size").value = c.containerSize || 0;
-    $("#ce_unit").value = c.containerUnit || "L";
-    $("#ce_count").value = c.containers || 0;
-    $("#ce_threshold").value = c.threshold || 0;
-    $("#chemEditSheet").style.display="block";
-  }
-  function closeChemEditor(){ $("#chemEditSheet").style.display="none"; _chemEditing=null; }
-  $("#ce_cancel")?.addEventListener("click", closeChemEditor);
-  $("#ce_save")?.addEventListener("click", ()=>{
-    if (!_chemEditing) return;
-    _chemEditing.name = $("#ce_name").value.trim();
-    _chemEditing.active = $("#ce_active").value.trim();
-    _chemEditing.containerSize = Number($("#ce_size").value)||0;
-    _chemEditing.containerUnit = $("#ce_unit").value||"L";
-    _chemEditing.containers = Number($("#ce_count").value)||0;
-    _chemEditing.threshold  = Number($("#ce_threshold").value)||0;
-    saveDB(DB); renderChems(); renderProcurement(); closeChemEditor(); toast("Chemical updated");
+    DBStore.saveDB(DB); renderChems();
   });
 
   function renderChems(){
     const list=$("#chemList"); if(!list) return; list.innerHTML="";
-    (DB.chems||[]).slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{
-      const total = (Number(c.containers)||0) * (Number(c.containerSize)||0);
-      const line = `${c.containers||0} × ${fmt(c.containerSize)} ${c.containerUnit} • total ${fmt(total)} ${c.containerUnit}`;
+    DB.chems.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{
+      const total = (c.containers||0) * (c.containerSize||0);
+      const line = `${c.containers} × ${total ? c.containerSize : 0} ${c.containerUnit} • total ${total} ${c.containerUnit}`;
       const card=document.createElement("div"); card.className="item";
       card.innerHTML=`<b>${c.name}</b><br><small>${line}</small><br><small>Active: ${c.active || "—"}</small>
         <div class="row gap end" style="margin-top:.4rem;">
           <button class="pill" data-edit>Edit</button>
           <button class="pill warn" data-del>Delete</button>
         </div>`;
-      if (c.threshold && c.containers < c.threshold) upsertProcurement(`Low stock: ${c.name}`);
       card.querySelector("[data-edit]")?.addEventListener("click", ()=> openChemEditor(c));
-      card.querySelector("[data-del]")?.addEventListener("click", ()=>{
-        if(!confirm("Delete chemical?")) return;
-        DB.chems = (DB.chems||[]).filter(x=>x!==c); saveDB(DB); renderChems(); renderProcurement();
-      });
+      card.querySelector("[data-del]")?.addEventListener("click", ()=>{ if(!confirm("Delete chemical?")) return; DB.chems = DB.chems.filter(x=>x!==c); DBStore.saveDB(DB); renderChems(); });
       list.appendChild(card);
     });
   }
   renderChems();
 
-  function upsertProcurement(title){
-    DB.procurement ||= [];
-    if (!DB.procurement.find(p=>p.title===title)){
-      DB.procurement.push({id:"P"+Date.now()+Math.random().toString(16).slice(2), title, createdAt:new Date().toISOString(), done:false});
-      saveDB(DB);
-    }
+  function openChemEditor(c){
+    $("#ce_name").value = c.name || "";
+    $("#ce_active").value = c.active || "";
+    $("#ce_size").value = c.containerSize || 0;
+    $("#ce_unit").value = c.containerUnit || "L";
+    $("#ce_count").value = c.containers || 0;
+    $("#ce_threshold").value = c.threshold || 0;
+    $("#chemEditSheet").hidden = false;
+    $("#ce_save").onclick = ()=>{
+      c.name = $("#ce_name").value.trim();
+      c.active = $("#ce_active").value.trim();
+      c.containerSize = Number($("#ce_size").value)||0;
+      c.containerUnit = $("#ce_unit").value||"L";
+      c.containers = Number($("#ce_count").value)||0;
+      c.threshold  = Number($("#ce_threshold").value)||0;
+      DBStore.saveDB(DB); renderChems(); $("#chemEditSheet").hidden = true; _WTToast("Saved");
+    };
+    $("#ce_cancel").onclick = ()=> $("#chemEditSheet").hidden = true;
   }
-  function renderProcurement(){
-    const ul=$("#procList"); if(!ul) return; ul.innerHTML="";
-    (DB.chems||[]).forEach(c=>{
-      if (c.threshold && (c.containers||0) < c.threshold){
-        const li=document.createElement("li");
-        li.textContent=`Low stock: ${c.name} (${c.containers||0} < ${c.threshold})`;
-        ul.appendChild(li);
-      }
-    });
-  }
-  renderProcurement();
 
-  // -------------------- Mapping ---------------------
+  // ---------- Map ----------
   let map, locateCtrl;
   function ensureMap(){
     if (map) return map;
     map = L.map("map").setView([-34.75,148.65], 10);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19, detectRetina:true}).addTo(map);
 
-    // Locate Me control
     locateCtrl = L.control({position:"bottomright"});
     locateCtrl.onAdd = function(){
       const d=L.DomUtil.create("div","leaflet-bar");
       d.style.background="#0c7d2b"; d.style.color="#fff"; d.style.borderRadius="6px"; d.style.padding="6px 10px"; d.style.cursor="pointer";
       d.innerText="Locate Me";
       d.onclick=()=>{
-        if (!navigator.geolocation){ toast("Enable location"); return; }
+        if (!navigator.geolocation){ _WTToast("Enable location"); return; }
         navigator.geolocation.getCurrentPosition(p=>{
           const pt=[p.coords.latitude,p.coords.longitude];
           map.setView(pt, 14);
@@ -585,59 +399,48 @@ document.addEventListener("DOMContentLoaded", () => {
     return map;
   }
 
-  $("#mapSearchBtn")?.addEventListener("click", ()=> renderMap(true));
+  $("#mapSearchBtn")?.addEventListener("click", ()=>renderMap(true));
   $("#mapResetBtn")?.addEventListener("click", ()=>{
-    $("#mapWeed").value=""; $("#mapType").value="All"; $("#mapFrom").value=""; $("#mapTo").value="";
-    renderMap(true);
+    $("#mapFrom").value=""; $("#mapTo").value=""; $("#mapWeed").value=""; $("#mapType").value="All"; renderMap(true);
   });
 
   function openAppleMaps(lat, lon){
     const mapsURL = `maps://?daddr=${lat},${lon}&dirflg=d`;
     const webURL  = `https://maps.apple.com/?daddr=${lat},${lon}&dirflg=d`;
-    const a=document.createElement("a");
-    a.href = mapsURL;
-    document.body.appendChild(a);
-    a.click();
+    const a=document.createElement("a"); a.href = mapsURL; document.body.appendChild(a); a.click();
     setTimeout(()=>{ window.open(webURL, "_blank"); a.remove(); }, 300);
   }
+  window.openAppleMaps = openAppleMaps;
 
   function renderMap(fit=false){
     const m=ensureMap();
-    // clear non-tile layers
     m.eachLayer(l=>{ if (!(l instanceof L.TileLayer)) m.removeLayer(l); });
 
     const from=$("#mapFrom").value||""; const to=$("#mapTo").value||"";
     const typ=$("#mapType").value||"All";
-    const q = ($("#mapWeed").value||"").trim().toLowerCase();
+    const weedQ=($("#mapWeed")?.value || "").trim().toLowerCase();
 
-    const tasks=(DB.tasks||[])
+    const tasks=DB.tasks
       .filter(t=>!t.archived)
       .filter(t=>(!from||t.date>=from)&&(!to||t.date<=to))
-      .filter(t=> typ==="All" ? true : t.type===typ)
-      .filter(t=>{
-        if (!q) return true;
-        const hay = `${t.name} ${t.roadName||""} ${t.weed||""}`.toLowerCase();
-        return hay.includes(q);
-      });
+      .filter(t=> typ==="All"?true:t.type===typ)
+      .filter(t=> weedQ ? (`${t.weed} ${t.name}`.toLowerCase().includes(weedQ)) : true);
 
     const group = L.featureGroup();
 
     tasks.forEach(t=>{
       if (t.coords?.length>1) group.addLayer(L.polyline(t.coords,{color:"yellow",weight:4,opacity:.9}));
-      const pt = t.coords?.[0] || [-34.75 + Math.random()*0.06, 148.65 + Math.random()*0.06];
-      const thumb = t.photo ? `<br><img src="${t.photo}" style="max-width:180px;border-radius:6px;margin-top:.3rem">` : "";
+      const pt = t.coords?.[0] || [-34.75 + Math.random()*0.08, 148.65 + Math.random()*0.08];
       const openId = `open_${t.id}`;
       const navId  = `nav_${t.id}`;
-      const popup = `<b>${t.name}</b><br>${t.type} • ${formatDateAU(t.date)}${thumb}
+      const popup = `<b>${t.name}</b><br>${t.type} • ${DBStore.fmtAU(t.date)}
                      <br><button id="${openId}" class="pill" style="margin-top:.35rem">Open</button>
                      <button id="${navId}" class="pill" style="margin-top:.35rem;margin-left:.4rem">Navigate</button>`;
       const marker = L.marker(pt); marker.bindPopup(popup);
       marker.on("popupopen", ()=>{
         setTimeout(()=>{
-          const ob=document.getElementById(openId);
-          const nb=document.getElementById(navId);
-          ob && (ob.onclick = ()=> showJobPopup(t));
-          nb && (nb.onclick = ()=> openAppleMaps(pt[0], pt[1]));
+          document.getElementById(openId)?.addEventListener("click", ()=> showJobPopup(t));
+          document.getElementById(navId)?.addEventListener("click", ()=> openAppleMaps(pt[0], pt[1]));
         },0);
       });
       group.addLayer(marker);
@@ -647,101 +450,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (fit && tasks.length){
       try { m.fitBounds(group.getBounds().pad(0.2)); } catch {}
     }
-
-    // last tracked line for quick visual
     try{
       const last = JSON.parse(localStorage.getItem("lastTrack")||"[]");
       if (Array.isArray(last) && last.length>1) L.polyline(last,{color:"#ffda44",weight:3,opacity:.8}).addTo(m);
     }catch{}
   }
 
-  // -------------------- Popups ----------------------
-  document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ const m=$(".modal"); if(m) m.remove(); } });
-
-  function showBatchPopup(b){
-    const jobs=(DB.tasks||[]).filter(t=> t.batch===b.id);
-    const jobsHtml= jobs.length ? `<ul>${jobs.map(t=>`<li><a href="#" data-open-job="${t.id}">${t.name}</a></li>`).join("")}</ul>` : "—";
-    const html=`
-      <div class="modal">
-        <div class="card">
-          <h3 style="margin-top:0">${b.id}</h3>
-          <div><b>Date:</b> ${formatDateAU(b.date) || "–"} · <b>Time:</b> ${b.time || "–"}</div>
-          <div><b>Total Mix Made:</b> ${fmt(b.mix)} L</div>
-          <div><b>Total Mix Remaining:</b> ${fmt(b.remaining)} L</div>
-          <div style="margin-top:.4rem;"><b>Chemicals (made of):</b><br>${b.chemicals || "—"}</div>
-          <div style="margin-top:.4rem;"><b>Linked Jobs:</b><br>${jobsHtml}</div>
-          <div class="row gap end" style="margin-top:.8rem;">
-            <button class="pill" data-edit-batch>Edit</button>
-            <button class="pill warn" data-close>Close</button>
-          </div>
-        </div>
-      </div>`;
-    const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
-    const modal=$(".modal");
-    modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
-    $$("[data-open-job]",modal).forEach(a=> a.addEventListener("click",(e)=>{ e.preventDefault(); const t=(DB.tasks||[]).find(x=> String(x.id)===a.dataset.openJob); t && showJobPopup(t); }));
-    $("[data-edit-batch]",modal)?.addEventListener("click",()=>{
-      const mix=Number(prompt("Total mix (L):",b.mix))||b.mix;
-      const rem=Number(prompt("Remaining (L):",b.remaining))||b.remaining;
-      const chems=prompt("Chemicals:",b.chemicals||"")||b.chemicals||"";
-      b.mix=mix; b.remaining=rem; b.chemicals=chems; b.time ||= nowTime();
-      saveDB(DB); modal.remove(); renderBatches(); populateBatchSelect();
-    });
+  // ---------- Mini batch list refresh from batches.js saves ----------
+  function renderBatchesMini(){
+    // just repopulate select; main list handled in batches.js
+    DB = DBStore.ensureDB();
+    populateBatchSelect();
   }
 
-  function showJobPopup(t){
-    const batchLink = t.batch ? `<a href="#" data-open-batch="${t.batch}">${t.batch}</a>` : "—";
-    const linkedInsp = t.linkedInspectionId ? `<a href="#" data-open-insp="${t.linkedInspectionId}">${t.linkedInspectionId}</a>` : "—";
-    const photoHtml = t.photo ? `<div style="margin:.4rem 0"><img src="${t.photo}" alt="photo" style="max-width:100%;border-radius:8px"/></div>` : "";
-    const hasPt = t.coords && t.coords.length;
-    const html=`
-      <div class="modal">
-        <div class="card">
-          <h3 style="margin-top:0">${t.name}</h3>
-          <div class="grid two">
-            <div><b>Type:</b> ${t.type}</div><div><b>Status:</b> ${t.status}</div>
-            <div><b>Date:</b> ${formatDateAU(t.date)}</div>
-            <div><b>Start:</b> ${t.start || "–"} · <b>Finish:</b> ${t.end || "–"}</div>
-            <div><b>Weed:</b> ${t.weed || "—"}</div><div><b>Batch:</b> ${batchLink}</div>
-            <div><b>Linked Inspection:</b> ${linkedInsp}</div><div><b>Reminder:</b> ${t.reminder || "—"} wk</div>
-            <div class="span2"><b>Weather:</b> ${fmt(t.temp)}°C, ${fmt(t.wind)} km/h, ${t.windDir||"–"}, ${fmt(t.humidity)}%</div>
-            <div class="span2"><b>Notes:</b> ${t.notes || "—"}</div>
-          </div>
-          ${photoHtml}
-          <div class="row gap end" style="margin-top:.8rem;">
-            ${hasPt? `<button class="pill" data-nav>Navigate</button>`:""}
-            <button class="pill" data-edit>Edit</button>
-            <button class="pill warn" data-close>Close</button>
-          </div>
-        </div>
-      </div>`;
-    const wrap=document.createElement("div"); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
-    const modal=$(".modal");
-    modal?.addEventListener("click",(e)=>{ if(e.target===modal || e.target.dataset.close!=null) modal.remove(); });
-
-    $("[data-open-batch]",modal)?.addEventListener("click",(e)=>{ e.preventDefault(); const b=(DB.batches||[]).find(x=> x.id===t.batch); b && showBatchPopup(b); });
-    $("[data-open-insp]",modal)?.addEventListener("click",(e)=>{ e.preventDefault(); const insp=(DB.tasks||[]).find(x=> x.type==="Inspection"&&(String(x.id)===t.linkedInspectionId||x.name===t.linkedInspectionId)); insp && showJobPopup(insp); });
-    $("[data-edit]",modal)?.addEventListener("click",()=>{
-      switchScreen("createTask");
-      $("#jobName").value=t.name; $("#councilNum").value=t.council||"";
-      $("#linkJobId").value=t.linkedJobId||""; $("#linkInspectionId").value=t.linkedInspectionId||"";
-      $("#taskType").value=t.type; $("#taskType").dispatchEvent(new Event("change"));
-      $("#weedSelect").value=t.weed||""; $("#batchSelect").value=t.batch||"";
-      $("#jobDate").value=t.date||todayISO(); $("#startTime").value=t.start||""; $("#endTime").value=t.end||"";
-      $("#temp").value=t.temp||""; $("#wind").value=t.wind||""; $("#windDir").value=t.windDir||""; $("#humidity").value=t.humidity||"";
-      $("#notes").value=t.notes||"";
-      if (t.photo){ $("#photoPreview").src=t.photo; $("#photoPreview").style.display="block"; }
-      modal.remove();
-    });
-    $("[data-nav]",modal)?.addEventListener("click", ()=>{
-      const pt = t.coords?.[0]; if(!pt){ toast("No coords saved"); return; }
-      openAppleMaps(pt[0], pt[1]);
-    });
-  }
-
-  // -------------------- Kick things off -------------
-  // Make sure Road Track panel reflects current type
-  syncTrackVis();
-  // Initial renders
-  renderRecords(); renderBatches(); renderChems(); renderProcurement();
-});
+})();
