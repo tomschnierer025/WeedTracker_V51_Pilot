@@ -1,135 +1,135 @@
-// WeedTracker V62 Final Pilot — storage.js
-// Handles saving, loading, backup, and restore of local data
+/* WeedTracker V60 Final Pilot — storage.js
+   Handles all data persistence, localStorage management, backups, and versioning
+*/
 
-const WT_STORAGE_KEYS = {
-  JOBS: "weedtracker_jobs",
-  BATCHES: "weedtracker_batches",
-  CHEMS: "weedtracker_chems",
-  BACKUP: "weedtracker_backup",
-  ACCOUNT: "weedtracker_account"
-};
+const STORAGE_KEY = "weedtracker_data_v60";
+const BACKUP_KEY = "weedtracker_backups_v60";
+const MAX_BACKUPS = 3;
 
-// ---------- Basic localStorage Helpers ----------
-function saveData(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+// Save current database state
+function saveDB(db, withBackup = true) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    if (withBackup) backupDB(db);
+  } catch (e) {
+    console.error("Save failed:", e);
+  }
 }
 
-function loadData(key) {
-  const val = localStorage.getItem(key);
-  return val ? JSON.parse(val) : [];
+// Load DB or create if missing
+function loadDB() {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) return ensureDB();
+    const parsed = JSON.parse(data);
+    if (typeof parsed !== "object" || Array.isArray(parsed)) return ensureDB();
+    parsed.version = 60;
+    return parsed;
+  } catch (e) {
+    console.warn("DB corrupted, restoring blank:", e);
+    return ensureDB();
+  }
 }
 
-function saveAccountEmail(email) {
-  localStorage.setItem(WT_STORAGE_KEYS.ACCOUNT, email);
-}
-
-function getAccountEmail() {
-  return localStorage.getItem(WT_STORAGE_KEYS.ACCOUNT) || "";
-}
-
-// ---------- Job Functions ----------
-function saveJob(job) {
-  const jobs = loadData(WT_STORAGE_KEYS.JOBS);
-  const existingIndex = jobs.findIndex(j => j.id === job.id);
-  if (existingIndex >= 0) jobs[existingIndex] = job;
-  else jobs.push(job);
-  saveData(WT_STORAGE_KEYS.JOBS, jobs);
-  createBackup();
-}
-
-function deleteJob(id) {
-  const jobs = loadData(WT_STORAGE_KEYS.JOBS).filter(j => j.id !== id);
-  saveData(WT_STORAGE_KEYS.JOBS, jobs);
-  createBackup();
-}
-
-function getAllJobs() {
-  return loadData(WT_STORAGE_KEYS.JOBS);
-}
-
-// ---------- Batch Functions ----------
-function saveBatch(batch) {
-  const batches = loadData(WT_STORAGE_KEYS.BATCHES);
-  const existingIndex = batches.findIndex(b => b.id === batch.id);
-  if (existingIndex >= 0) batches[existingIndex] = batch;
-  else batches.push(batch);
-  saveData(WT_STORAGE_KEYS.BATCHES, batches);
-  createBackup();
-}
-
-function deleteBatch(id) {
-  const batches = loadData(WT_STORAGE_KEYS.BATCHES).filter(b => b.id !== id);
-  saveData(WT_STORAGE_KEYS.BATCHES, batches);
-  createBackup();
-}
-
-function getAllBatches() {
-  return loadData(WT_STORAGE_KEYS.BATCHES);
-}
-
-// ---------- Chemical Inventory ----------
-function saveChemical(chem) {
-  const chems = loadData(WT_STORAGE_KEYS.CHEMS);
-  const index = chems.findIndex(c => c.name.toLowerCase() === chem.name.toLowerCase());
-  if (index >= 0) chems[index] = chem;
-  else chems.push(chem);
-  saveData(WT_STORAGE_KEYS.CHEMS, chems);
-  createBackup();
-}
-
-function deleteChemical(name) {
-  const chems = loadData(WT_STORAGE_KEYS.CHEMS).filter(c => c.name.toLowerCase() !== name.toLowerCase());
-  saveData(WT_STORAGE_KEYS.CHEMS, chems);
-  createBackup();
-}
-
-function getAllChemicals() {
-  return loadData(WT_STORAGE_KEYS.CHEMS);
-}
-
-// ---------- Backup & Restore ----------
-function createBackup() {
-  const data = {
-    jobs: getAllJobs(),
-    batches: getAllBatches(),
-    chems: getAllChemicals(),
-    account: getAccountEmail(),
-    timestamp: new Date().toISOString()
+// Create base DB if empty
+function ensureDB() {
+  const base = {
+    version: 60,
+    accountEmail: "",
+    tasks: [],
+    batches: [],
+    chems: [],
+    procurement: [],
+    weeds: [],
   };
-  saveData(WT_STORAGE_KEYS.BACKUP, data);
+  saveDB(base, false);
+  return base;
 }
 
-function restoreBackup() {
-  const backup = JSON.parse(localStorage.getItem(WT_STORAGE_KEYS.BACKUP));
-  if (!backup) return false;
-  if (backup.jobs) saveData(WT_STORAGE_KEYS.JOBS, backup.jobs);
-  if (backup.batches) saveData(WT_STORAGE_KEYS.BATCHES, backup.batches);
-  if (backup.chems) saveData(WT_STORAGE_KEYS.CHEMS, backup.chems);
-  if (backup.account) saveAccountEmail(backup.account);
-  return true;
+// Backup logic
+function backupDB(db) {
+  try {
+    let arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
+    arr.unshift({ ts: new Date().toISOString(), db });
+    if (arr.length > MAX_BACKUPS) arr = arr.slice(0, MAX_BACKUPS);
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
+  } catch (e) {
+    console.warn("Backup failed:", e);
+  }
 }
 
-// ---------- Export / Clear ----------
-function exportData() {
-  const data = {
-    jobs: getAllJobs(),
-    batches: getAllBatches(),
-    chems: getAllChemicals(),
-    backup: JSON.parse(localStorage.getItem(WT_STORAGE_KEYS.BACKUP))
+// Restore latest backup
+function restoreLatestBackup() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
+    if (!arr.length) {
+      alert("No backup found");
+      return null;
+    }
+    const latest = arr[0].db;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(latest));
+    alert("Backup restored successfully");
+    return latest;
+  } catch (e) {
+    console.error("Restore failed:", e);
+    alert("Restore failed");
+    return null;
+  }
+}
+
+// Offer restore if empty
+function autoRestoreIfEmpty() {
+  try {
+    const db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    if ((!db.tasks || !db.tasks.length) && localStorage.getItem(BACKUP_KEY)) {
+      const proceed = confirm("A backup was found. Restore it now?");
+      if (proceed) return restoreLatestBackup();
+    }
+  } catch (e) {
+    console.warn("Auto-restore check failed:", e);
+  }
+  return null;
+}
+
+// Clear database
+function clearDB() {
+  if (!confirm("This will clear ALL WeedTracker data. Continue?")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(BACKUP_KEY);
+  const fresh = ensureDB();
+  alert("All data cleared");
+  return fresh;
+}
+
+// Export current DB
+function exportDB() {
+  try {
+    const db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "weedtracker_data_v60.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Export failed:", e);
+  }
+}
+
+// Import DB from user file
+function importDB(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!imported || typeof imported !== "object") throw new Error("Invalid file");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(imported));
+      alert("Database imported successfully");
+      location.reload();
+    } catch (err) {
+      alert("Import failed: " + err.message);
+    }
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const email = getAccountEmail() || "user";
-  const date = new Date().toISOString().split("T")[0];
-  a.href = url;
-  a.download = `WeedTrackerBackup_${email}_${date}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function clearAllData() {
-  Object.values(WT_STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
+  reader.readAsText(file);
 }
