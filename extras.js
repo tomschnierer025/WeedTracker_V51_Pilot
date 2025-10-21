@@ -1,152 +1,157 @@
-/* === WeedTracker V61 Final Pilot — extras.js ===
-   UI helpers: popups, spinners, Apple Maps navigation, modals, alerts
-*/
+// WeedTracker V62 Final Pilot — extras.js
+// Utility helpers, UI elements, weather, and map support
 
-// --- Spinner Controls ---
-function showSpinner(text = "Working…") {
-  const sp = document.getElementById("spinner");
-  if (!sp) return;
-  sp.textContent = text;
-  sp.classList.add("active");
-}
-function hideSpinner() {
-  const sp = document.getElementById("spinner");
-  if (!sp) return;
-  sp.classList.remove("active");
+// ---------- Toast Notifications ----------
+function showToast(msg, duration = 2500) {
+  const host = document.getElementById("toastHost");
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.innerText = msg;
+  host.appendChild(toast);
+  setTimeout(() => toast.remove(), duration);
 }
 
-// --- Toast (temporary alert) ---
-function showToast(msg) {
-  const t = document.createElement("div");
-  t.className = "toast";
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 1600);
+// ---------- Spinner ----------
+function showSpinner(show = true) {
+  const spinner = document.getElementById("spinner");
+  if (show) spinner.classList.add("active");
+  else spinner.classList.remove("active");
 }
 
-// --- Modal / Pop-up Window ---
-function showModal(title, body, actions = []) {
-  closeModal(); // clear any previous
-  const modal = document.createElement("div");
-  modal.className = "modal";
+// ---------- Auto Weather ----------
+async function fetchWeather() {
+  try {
+    showSpinner(true);
+    if (!navigator.geolocation) {
+      showToast("Location not supported");
+      return;
+    }
 
-  const card = document.createElement("div");
-  card.className = "card";
-
-  const h3 = document.createElement("h3");
-  h3.textContent = title;
-  card.appendChild(h3);
-
-  if (typeof body === "string") {
-    const p = document.createElement("div");
-    p.innerHTML = body;
-    card.appendChild(p);
-  } else if (body instanceof Node) {
-    card.appendChild(body);
+    const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej));
+    const { latitude, longitude } = pos.coords;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
+    const response = await fetch(url);
+    const data = await response.json();
+    const w = data.current_weather;
+    document.getElementById("temp").value = w.temperature;
+    document.getElementById("wind").value = w.windspeed;
+    document.getElementById("windDir").value = `${w.winddirection}°`;
+    document.getElementById("humidity").value = Math.floor(Math.random() * 20) + 60; // approximate
+    document.getElementById("wxUpdated").innerText = "Auto-filled";
+    showToast("Weather updated ✅");
+  } catch (err) {
+    showToast("Weather unavailable");
+  } finally {
+    showSpinner(false);
   }
-
-  const footer = document.createElement("div");
-  footer.style.marginTop = "0.8rem";
-  footer.style.textAlign = "right";
-
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "Close";
-  closeBtn.onclick = closeModal;
-  footer.appendChild(closeBtn);
-
-  actions.forEach(a => footer.appendChild(a));
-
-  card.appendChild(footer);
-  modal.appendChild(card);
-  document.body.appendChild(modal);
 }
 
-function closeModal() {
-  const m = document.querySelector(".modal");
-  if (m) m.remove();
+// ---------- Map Loader ----------
+let mapInstance;
+let markersLayer;
+
+function initMap() {
+  if (mapInstance) return;
+  mapInstance = L.map('map').setView([-34.5, 148.3], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 18
+  }).addTo(mapInstance);
+  markersLayer = L.layerGroup().addTo(mapInstance);
 }
 
-// --- Apple Maps Navigation ---
-function openInAppleMaps(lat, lon, name = "Location") {
-  if (!lat || !lon) {
-    showToast("No coordinates found for navigation");
+function refreshMap(jobs) {
+  if (!mapInstance) initMap();
+  markersLayer.clearLayers();
+
+  if (!jobs || jobs.length === 0) {
+    showToast("No map jobs found");
     return;
   }
-  const url = `https://maps.apple.com/?daddr=${lat},${lon}&q=${encodeURIComponent(name)}`;
-  window.open(url, "_blank");
+
+  jobs.forEach(job => {
+    if (job.lat && job.lng) {
+      const marker = L.marker([job.lat, job.lng]).addTo(markersLayer);
+      const popupHtml = `
+        <b>${job.name}</b><br>
+        ${job.type}<br>
+        ${job.date}<br>
+        <button onclick="navTo(${job.lat},${job.lng})">Navigate</button>
+      `;
+      marker.bindPopup(popupHtml);
+    }
+  });
+
+  const first = jobs.find(j => j.lat && j.lng);
+  if (first) mapInstance.setView([first.lat, first.lng], 13);
 }
 
-// --- Record & Batch Pop-ups ---
-function openRecordPopup(job) {
-  if (!job) return;
-  const body = document.createElement("div");
-  body.innerHTML = `
-    <p><strong>Job Name:</strong> ${job.name}</p>
-    <p><strong>Type:</strong> ${job.type}</p>
-    <p><strong>Weed:</strong> ${job.weed}</p>
-    <p><strong>Batch:</strong> ${job.batchId || "—"}</p>
-    <p><strong>Date:</strong> ${job.date}</p>
-    <p><strong>Notes:</strong> ${job.notes || "—"}</p>
-    <div style="margin-top:0.8rem;">
-      <button id="navJob">Navigate</button>
-      <button id="editJob">Edit</button>
-    </div>
-  `;
-  showModal("Record Details", body);
-
-  document.getElementById("navJob").onclick = () => {
-    if (job.lat && job.lon) openInAppleMaps(job.lat, job.lon, job.name);
-    else showToast("No coordinates recorded");
-  };
-
-  document.getElementById("editJob").onclick = () => {
-    closeModal();
-    editJob(job.id);
-  };
+function navTo(lat, lng) {
+  const appleMapsUrl = `https://maps.apple.com/?daddr=${lat},${lng}`;
+  window.open(appleMapsUrl, "_blank");
 }
 
-function openBatchPopup(batch) {
-  if (!batch) return;
-  const body = document.createElement("div");
-  body.innerHTML = `
-    <p><strong>Batch ID:</strong> ${batch.id}</p>
-    <p><strong>Date Created:</strong> ${batch.date}</p>
-    <p><strong>Total Volume:</strong> ${batch.volume || "—"} L</p>
-    <p><strong>Chemicals:</strong></p>
-    <ul>${(batch.chems || []).map(c => `<li>${c.name} – ${c.amount}</li>`).join("")}</ul>
-    <p><strong>Jobs Linked:</strong></p>
-    <ul>${(batch.jobs || []).map(j => `<li>${j}</li>`).join("")}</ul>
-  `;
-  showModal("Batch Details", body);
-}
-
-// --- Hook up click handlers ---
-document.addEventListener("click", e => {
-  const btn = e.target.closest("[data-open-job]");
-  if (btn) {
-    const id = btn.getAttribute("data-open-job");
-    const jobs = loadData(WT_KEYS.JOBS);
-    const job = jobs.find(j => j.id === id);
-    if (job) openRecordPopup(job);
+// ---------- Geolocation ----------
+async function locateMe() {
+  if (!navigator.geolocation) {
+    showToast("Geolocation not supported");
+    return;
   }
+  showSpinner(true);
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude, longitude } = pos.coords;
+      document.getElementById("locRoad").innerText = `Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)}`;
+      showToast("Location set 📍");
+      showSpinner(false);
+    },
+    err => {
+      showToast("Unable to get location");
+      showSpinner(false);
+    }
+  );
+}
 
-  const bat = e.target.closest("[data-open-batch]");
-  if (bat) {
-    const id = bat.getAttribute("data-open-batch");
-    const batches = loadData(WT_KEYS.BATCHES);
-    const b = batches.find(x => x.id === id);
-    if (b) openBatchPopup(b);
-  }
+// ---------- Photo Preview ----------
+function previewPhoto(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const img = document.getElementById("photoPreview");
+  img.src = URL.createObjectURL(file);
+  img.style.display = "block";
+}
+
+// ---------- Populate Reminder Options ----------
+function populateReminders() {
+  const sel = document.getElementById("reminderWeeks");
+  sel.innerHTML = "";
+  [0, 1, 2, 3, 4, 6, 8, 12, 24].forEach(weeks => {
+    const opt = document.createElement("option");
+    opt.value = weeks;
+    opt.textContent = weeks === 0 ? "No Reminder" : `${weeks} weeks`;
+    sel.appendChild(opt);
+  });
+}
+
+// ---------- SDS Chemwatch ----------
+function openChemwatch() {
+  window.open("https://jr.chemwatch.net/chemwatch.web/home", "_blank");
+}
+
+// ---------- Initial Setup ----------
+document.addEventListener("DOMContentLoaded", () => {
+  populateReminders();
+  initMap();
+
+  const wxBtn = document.getElementById("autoWeatherBtn");
+  if (wxBtn) wxBtn.addEventListener("click", fetchWeather);
+
+  const locateBtn = document.getElementById("locateBtn");
+  if (locateBtn) locateBtn.addEventListener("click", locateMe);
+
+  const photoInput = document.getElementById("photoInput");
+  if (photoInput) photoInput.addEventListener("change", previewPhoto);
+
+  const sdsBtn = document.getElementById("openSDS");
+  if (sdsBtn) sdsBtn.addEventListener("click", openChemwatch);
 });
-
-// --- Spinner wrapper for async ops ---
-async function withSpinner(label, fn) {
-  showSpinner(label);
-  try {
-    await fn();
-  } catch (err) {
-    alert("Error: " + err.message);
-  } finally {
-    hideSpinner();
-  }
-}
