@@ -1,100 +1,70 @@
-// ---------- WeedTracker V63 - extras.js ---------- //
-// Popup management, notifications, and shared helpers
+/* ===== WeedTrackerV60Pilot — extras.js (helpers, spinner, popup, date, wind) ===== */
 
-// ---------- POPUP ----------
-function showPopup(title, content, allowClose = true) {
+// Toast
+window.toast = function(msg, ms=1600){
+  const d=document.createElement("div");
+  d.textContent=msg;
+  Object.assign(d.style,{
+    position:"fixed",bottom:"1.2rem",left:"50%",transform:"translateX(-50%)",
+    background:"#d9f7d9",color:"#063",padding:".6rem 1rem",borderRadius:"20px",
+    boxShadow:"0 2px 8px rgba(0,0,0,.25)",zIndex:9999,fontWeight:800
+  });
+  document.body.appendChild(d); setTimeout(()=>d.remove(),ms);
+};
+
+// Popup
+window.showPopup = function(title, contentHTML){
   const existing = document.getElementById("popup");
   if (existing) existing.remove();
+  const host = document.createElement("div");
+  host.id="popup"; host.className="modal";
+  host.innerHTML = `
+    <div class="card p">
+      <h3 style="margin-top:0">${title}</h3>
+      <div class="popup-body">${contentHTML}</div>
+      <div class="row end" style="margin-top:.6rem">
+        <button class="pill warn" id="popupClose">✖ Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(host);
+  document.getElementById("popupClose").onclick = ()=> host.remove();
+  host.addEventListener("click",(e)=>{ if(e.target===host) host.remove(); });
+};
+document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ const m=document.getElementById("popup"); if(m) m.remove(); }});
 
-  const popup = document.createElement("div");
-  popup.classList.add("popup");
-  popup.id = "popup";
-
-  const heading = document.createElement("h3");
-  heading.textContent = title;
-  popup.appendChild(heading);
-
-  const body = document.createElement("div");
-  body.innerHTML = content;
-  popup.appendChild(body);
-
-  if (allowClose) {
-    const closeBtn = document.createElement("button");
-    closeBtn.textContent = "✖ Close";
-    closeBtn.classList.add("close");
-    closeBtn.onclick = () => popup.remove();
-    popup.appendChild(closeBtn);
-  }
-
-  document.body.appendChild(popup);
+// Spinner overlay
+function ensureSpinner(){
+  let s=document.getElementById("spinner");
+  if(!s){ s=document.createElement("div"); s.id="spinner"; s.className="spinner-overlay"; s.style.display='none'; document.body.appendChild(s); }
+  return s;
 }
+window.showSpinner = function(msg="Working…"){
+  const s=ensureSpinner(); s.textContent=msg; s.style.display="flex";
+};
+window.showSpinnerDone = function(msg="Done ✅", timeout=1200){
+  const s=ensureSpinner(); s.textContent=msg; setTimeout(()=> s.style.display="none", timeout);
+};
 
-// ---------- SPINNER ----------
-function showSpinner(msg = "Saving…") {
-  let spinner = document.getElementById("spinner");
-  if (!spinner) {
-    spinner = document.createElement("div");
-    spinner.id = "spinner";
-    document.body.appendChild(spinner);
-  }
-  spinner.textContent = msg;
-  spinner.style.display = "block";
+// Date helpers (AU)
+window.formatDateAU = function(d){
+  const dt = (d instanceof Date)? d : new Date(d);
+  const dd = String(dt.getDate()).padStart(2,"0");
+  const mm = String(dt.getMonth()+1).padStart(2,"0");
+  const yyyy = dt.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+};
+window.formatDateAUCompact = function(d){
+  const dt = (d instanceof Date)? d : new Date(d);
+  const dd = String(dt.getDate()).padStart(2,"0");
+  const mm = String(dt.getMonth()+1).padStart(2,"0");
+  const yy = String(dt.getFullYear()).slice(-2);
+  return `${dd}${mm}${yy}`;
+};
 
-  setTimeout(() => {
-    spinner.style.display = "none";
-  }, 1800);
-}
-
-// ---------- TOAST (BOTTOM FLASH) ----------
-function flashMessage(message, color = "#4caf50") {
-  const msgBox = document.createElement("div");
-  msgBox.textContent = message;
-  msgBox.style.position = "fixed";
-  msgBox.style.bottom = "25px";
-  msgBox.style.left = "50%";
-  msgBox.style.transform = "translateX(-50%)";
-  msgBox.style.background = color;
-  msgBox.style.color = "#fff";
-  msgBox.style.padding = "10px 18px";
-  msgBox.style.borderRadius = "8px";
-  msgBox.style.fontWeight = "600";
-  msgBox.style.zIndex = "99999";
-  msgBox.style.boxShadow = "0 0 10px rgba(0,0,0,0.5)";
-  document.body.appendChild(msgBox);
-
-  setTimeout(() => msgBox.remove(), 2000);
-}
-
-// ---------- BATCH SUMMARY CARD ----------
-function showBatchSummary(batch) {
-  const content = `
-    <strong>Batch Created:</strong> ${batch.id}<br>
-    <strong>Date:</strong> ${batch.date}<br>
-    <strong>Total Mix:</strong> ${batch.totalMix} L<br>
-    <strong>Chemicals:</strong> ${batch.chemicals.map(c => `${c.name} (${c.amount}${c.unit})`).join(", ")}<br>
-    <strong>Remaining:</strong> ${batch.remainingMix ?? batch.totalMix} L
-  `;
-  flashMessage(`✅ Batch Saved: ${batch.id}`, "#2ecc71");
-  console.log("Batch summary:", content);
-}
-
-// ---------- GENERAL HELPERS ----------
-function generateID(prefix = "ID") {
-  return `${prefix}-${Math.floor(Math.random() * 99999)}-${Date.now()}`;
-}
-
-function formatDateTime() {
-  const now = new Date();
-  const d = now.toISOString().slice(0, 10);
-  const t = now.toTimeString().slice(0, 5);
-  return `${d}T${t}`;
-}
-
-function openPage(pageID) {
-  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-  document.getElementById(pageID).classList.add("active");
-}
-
-function clearData() {
-  clearAllData();
-}
+// Wind cardinal
+window.cardinalFromDeg = function(deg){
+  if (deg == null || isNaN(deg)) return "";
+  const dirs=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  const i = Math.round(deg / 22.5) % 16;
+  return dirs[i];
+};
