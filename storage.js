@@ -1,72 +1,122 @@
-/* WeedTracker V61 Final Pilot — storage.js
-   DB helpers: load/save/backup, AU date helpers. */
+// ---------- WeedTracker V63 - storage.js ---------- //
+// Local data management for tasks, chemicals, and batches
 
-(function(){
-  const STORAGE_KEY = "weedtracker_data";
-  const BACKUP_KEY  = "weedtracker_backup";
-  const MAX_BACKUPS = 3;
-
-  const NSW_WEEDS_40 = [
-    "Noxious Weeds (category)",
-    "African Boxthorn (noxious)","African Lovegrass (noxious)","Bathurst Burr (noxious)","Blackberry (noxious)",
-    "Cape Broom (noxious)","Chilean Needle Grass (noxious)","Coolatai Grass (noxious)","Fireweed (noxious)",
-    "Gorse (noxious)","Lantana (noxious)","Patterson’s Curse (noxious)","Serrated Tussock (noxious)",
-    "St John’s Wort (noxious)","Sweet Briar (noxious)","Willow spp. (noxious)",
-    "African Feathergrass","Artichoke Thistle","Balloon Vine","Blue Heliotrope","Bridal Creeper","Caltrop",
-    "Coltsfoot","Fleabane","Flax-leaf Broom","Fountain Grass","Galvanised Burr","Giant Parramatta Grass",
-    "Glycine","Green Cestrum","Horehound","Khaki Weed","Noogoora Burr","Parthenium Weed","Prickly Pear (common)",
-    "Saffron Thistle","Silverleaf Nightshade","Spear Thistle","Sweet Vernal Grass","Three-cornered Jack","Wild Radish",
-    "Cape Broom" /* explicit add */
-  ];
-
-  const DEFAULT_CHEMS = [
-    {name:"Crucial", active:"Glyphosate 540 g/L", containerSize:20, containerUnit:"L", containers:4, threshold:2},
-    {name:"SuperWet", active:"Non-ionic surfactant", containerSize:20, containerUnit:"L", containers:1, threshold:1},
-    {name:"Bow Saw 600", active:"Triclopyr 600 g/L", containerSize:1, containerUnit:"L", containers:2, threshold:1},
-    {name:"Clethodim", active:"Clethodim 240 g/L", containerSize:20, containerUnit:"L", containers:1, threshold:1},
-    {name:"Grazon", active:"Triclopyr + Picloram", containerSize:20, containerUnit:"L", containers:1, threshold:1},
-    {name:"Bosol", active:"Metsulfuron-methyl", containerSize:500, containerUnit:"g", containers:2, threshold:1},
-    {name:"Hastings", active:"MCPA", containerSize:20, containerUnit:"L", containers:1, threshold:1},
-    {name:"Outright", active:"Fluroxypyr", containerSize:20, containerUnit:"L", containers:1, threshold:1}
-  ];
-
-  function auDateISO(){
-    return new Date().toISOString().split("T")[0];
+// Save data
+function saveToStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.error("Save error:", err);
   }
-  function fmtAU(d){
-    const dt = (d instanceof Date)? d : new Date(d);
-    const dd = String(dt.getDate()).padStart(2,"0");
-    const mm = String(dt.getMonth()+1).padStart(2,"0");
-    return `${dd}-${mm}-${dt.getFullYear()}`;
-  }
+}
 
-  function backup(db){
-    try{
-      const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
-      arr.unshift({ts:new Date().toISOString(), db});
-      while(arr.length>MAX_BACKUPS) arr.pop();
-      localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
-    }catch(e){ console.warn("Backup failed", e); }
+// Load data
+function loadFromStorage(key) {
+  try {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
+  } catch (err) {
+    console.error("Load error:", err);
+    return [];
   }
+}
 
-  function ensureDB(){
-    let db;
-    try{ db = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }catch{ db = {}; }
-    db.version ??= 61;
-    db.tasks ??= [];
-    db.batches ??= [];
-    db.chems ??= [];
-    db.procurement ??= [];
-    db.weeds ??= NSW_WEEDS_40.slice();
-    if (!db.chems.length) db.chems = DEFAULT_CHEMS.slice();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    return db;
+// ---------- TASKS ----------
+function saveTaskToStorage(task) {
+  const tasks = loadFromStorage("tasks");
+  const idx = tasks.findIndex(t => t.id === task.id);
+  if (idx > -1) tasks[idx] = task; else tasks.push(task);
+  saveToStorage("tasks", tasks);
+}
+
+function getAllTasks() {
+  return loadFromStorage("tasks");
+}
+
+function deleteTask(id) {
+  let tasks = loadFromStorage("tasks");
+  tasks = tasks.filter(t => t.id !== id);
+  saveToStorage("tasks", tasks);
+}
+
+function markTaskComplete(id, status) {
+  const tasks = loadFromStorage("tasks");
+  const target = tasks.find(t => t.id === id);
+  if (target) {
+    target.status = status;
+    target.edited = new Date().toLocaleString();
   }
+  saveToStorage("tasks", tasks);
+}
 
-  function saveDB(db, withBackup=true){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    if (withBackup) backup(db);
+// ---------- CHEMICALS ----------
+function getChemicals() {
+  return loadFromStorage("chemicals");
+}
+
+function saveChemical(chemical) {
+  const chemicals = loadFromStorage("chemicals");
+  const idx = chemicals.findIndex(c => c.name === chemical.name);
+  if (idx > -1) chemicals[idx] = chemical; else chemicals.push(chemical);
+  saveToStorage("chemicals", chemicals);
+}
+
+function deductChemicalUsage(name, amountUsed, unit) {
+  const chemicals = loadFromStorage("chemicals");
+  const chem = chemicals.find(c => c.name === name);
+  if (chem) {
+    chem.quantity = Math.max(0, chem.quantity - amountUsed);
+    chem.lastUsed = new Date().toLocaleString();
+    chem.unit = unit || chem.unit;
   }
+  saveToStorage("chemicals", chemicals);
+}
 
-  window.DBStore = { ensureDB, saveDB, backup, auDateISO, fmtAU, NSW_WEEDS_40 };
-})();
+// ---------- BATCHES ----------
+function saveBatch(batch) {
+  const batches = loadFromStorage("batches");
+  const idx = batches.findIndex(b => b.id === batch.id);
+  if (idx > -1) batches[idx] = batch; else batches.push(batch);
+  saveToStorage("batches", batches);
+}
+
+function getBatches() {
+  return loadFromStorage("batches");
+}
+
+function deleteBatch(id) {
+  let batches = loadFromStorage("batches");
+  batches = batches.filter(b => b.id !== id);
+  saveToStorage("batches", batches);
+}
+
+function markBatchDumped(id, reason) {
+  const batches = loadFromStorage("batches");
+  const batch = batches.find(b => b.id === id);
+  if (batch) {
+    batch.dumped = true;
+    batch.dumpReason = reason;
+    batch.remainingMix = 0;
+  }
+  saveToStorage("batches", batches);
+}
+
+// ---------- WEATHER ----------
+function saveWeatherSnapshot(snapshot) {
+  const weather = loadFromStorage("weatherHistory");
+  weather.push(snapshot);
+  saveToStorage("weatherHistory", weather);
+}
+
+function getWeatherHistory() {
+  return loadFromStorage("weatherHistory");
+}
+
+// ---------- CLEAR ----------
+function clearAllData() {
+  if (confirm("⚠️ This will permanently delete all local data. Continue?")) {
+    localStorage.clear();
+    alert("All data cleared.");
+    location.reload();
+  }
+}
