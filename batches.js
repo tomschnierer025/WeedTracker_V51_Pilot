@@ -1,184 +1,59 @@
-// ---------- WeedTracker V63 - batches.js ---------- //
-// Handles batch creation, totals, and chemical usage deduction
-
-document.addEventListener("DOMContentLoaded", () => {
-  loadBatchList();
-});
-
-// ---------- LOAD BATCHES ----------
-function loadBatchList() {
-  const container = document.getElementById("batchList");
-  if (!container) return;
-  const batches = getBatches();
-  container.innerHTML = "";
-
-  if (!batches.length) {
-    container.innerHTML = "<p style='text-align:center;color:#bbb;'>No batches created yet.</p>";
-    return;
+/* ===== WeedTrackerV60Pilot — batches.js =====
+   Utilities for batch creation rows & summary
+*/
+(function(){
+  function chemRowTemplate(idx, names){
+    const options = names.map(n=>`<option value="${n}">${n}</option>`).join("");
+    return `
+      <div class="chem-row" data-idx="${idx}" style="display:grid;grid-template-columns:1.4fr .9fr .9fr .9fr auto;gap:.5rem;margin:.45rem 0">
+        <div class="field">
+          <label>Chemical</label>
+          <select class="br_name">
+            <option value="">— Select —</option>
+            ${options}
+          </select>
+        </div>
+        <div class="field">
+          <label>Rate /100L</label>
+          <input class="br_rate" inputmode="decimal" placeholder="e.g. 2"/>
+        </div>
+        <div class="field">
+          <label>Unit</label>
+          <select class="br_unit">
+            <option>L</option>
+            <option>mL</option>
+            <option>g</option>
+            <option>kg</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Calculated Amount</label>
+          <input class="br_calc" readonly/>
+        </div>
+        <div class="row center">
+          <button class="pill warn br_del">✖</button>
+        </div>
+      </div>`;
   }
 
-  batches.forEach(batch => {
-    const div = document.createElement("div");
-    div.classList.add("record-card");
-    div.innerHTML = `
-      <strong>${batch.name}</strong><br>
-      Date: ${batch.date}<br>
-      Total Mix: ${batch.totalMix} L<br>
-      Remaining: ${batch.remainingMix ?? batch.totalMix} L
-      ${batch.dumped ? `<br><span style="color:#e74c3c;">Dumped: ${batch.dumpReason || "N/A"}</span>` : ""}
-      <div class="button-row">
-        <button onclick="openBatch('${batch.id}')">Open</button>
-        <button onclick="deleteBatch('${batch.id}')">Delete</button>
-      </div>
-    `;
-    container.appendChild(div);
-  });
-}
-
-// ---------- OPEN BATCH ----------
-function openBatch(id) {
-  const batch = getBatches().find(b => b.id === id);
-  if (!batch) return flashMessage("Batch not found", "#e74c3c");
-
-  const chemicalDetails = batch.chemicals.map(c =>
-    `<li>${c.name}: ${c.amount}${c.unit}</li>`
-  ).join("");
-
-  const linkedJobs = batch.linkedJobs?.length
-    ? batch.linkedJobs.map(j => `<li><a href="#" onclick="openJob('${j}')">${j}</a></li>`).join("")
-    : "<em>No linked jobs</em>";
-
-  showPopup(
-    `Batch ${batch.id}`,
-    `
-      <strong>Date:</strong> ${batch.date}<br>
-      <strong>Total Mix:</strong> ${batch.totalMix} L<br>
-      <strong>Remaining Mix:</strong> ${batch.remainingMix ?? 0} L<br>
-      <hr>
-      <strong>Chemicals:</strong><ul>${chemicalDetails}</ul>
-      <strong>Linked Jobs:</strong><ul>${linkedJobs}</ul>
-      <div class="button-row">
-        <button onclick="promptDumpBatch('${batch.id}')">Dump</button>
-      </div>
-    `
-  );
-}
-
-// ---------- PROMPT DUMP ----------
-function promptDumpBatch(id) {
-  const reason = prompt("Enter reason for dumping:");
-  if (!reason) return;
-  markBatchDumped(id, reason);
-  flashMessage("Batch dumped successfully", "#e67e22");
-  loadBatchList();
-}
-
-// ---------- CREATE BATCH ----------
-function openCreateBatchForm() {
-  const chemOptions = getChemicals().map(c => `<option value="${c.name}">${c.name}</option>`).join("");
-  showPopup("Create New Batch", `
-    <label>Auto Name:</label>
-    <input id="batchName" placeholder="Auto-generated" readonly value="Batch-${Date.now()}">
-    <label>Date:</label>
-    <input type="datetime-local" id="batchDate" value="${formatDateTime()}">
-    <label>Total Mix (L):</label>
-    <input type="number" id="totalMix" min="0" step="0.1">
-
-    <div id="chemList"></div>
-    <button onclick="addChemicalRow()">➕ Add Chemical</button>
-
-    <label>Link Job Number (optional):</label>
-    <input id="linkJob" placeholder="Enter job ID if applicable">
-
-    <div class="button-row">
-      <button onclick="createBatch()">Create Batch</button>
-      <button onclick="cancelBatch()">Delete / Cancel</button>
-    </div>
-  `);
-  addChemicalRow();
-}
-
-// ---------- ADD / REMOVE CHEMICALS ----------
-function addChemicalRow() {
-  const chemList = document.getElementById("chemList");
-  const row = document.createElement("div");
-  row.classList.add("record-card");
-  const chemOptions = getChemicals().map(c => `<option value="${c.name}">${c.name}</option>`).join("");
-
-  row.innerHTML = `
-    <label>Chemical:</label>
-    <select class="chemName">${chemOptions}</select>
-
-    <label>Amount per 100L:</label>
-    <input type="number" class="chemRate" placeholder="e.g., 2">
-
-    <label>Unit:</label>
-    <select class="chemUnit">
-      <option value="L">L</option>
-      <option value="mL">mL</option>
-      <option value="g">g</option>
-      <option value="kg">kg</option>
-    </select>
-    <button onclick="this.parentElement.remove()">❌ Remove</button>
-  `;
-  chemList.appendChild(row);
-}
-
-// ---------- CREATE BATCH FINAL ----------
-function createBatch() {
-  const name = document.getElementById("batchName").value.trim();
-  const date = document.getElementById("batchDate").value;
-  const totalMix = parseFloat(document.getElementById("totalMix").value);
-  const jobLink = document.getElementById("linkJob").value.trim();
-
-  if (!totalMix || totalMix <= 0) return flashMessage("Enter valid total mix", "#e74c3c");
-
-  const chemRows = document.querySelectorAll("#chemList .record-card");
-  const chemicals = [];
-  let totalChemCheck = true;
-
-  chemRows.forEach(row => {
-    const name = row.querySelector(".chemName").value;
-    const rate = parseFloat(row.querySelector(".chemRate").value);
-    const unit = row.querySelector(".chemUnit").value;
-
-    if (!name || !rate) return;
-    const totalAmount = (rate / 100) * totalMix;
-
-    // Check inventory
-    const chem = getChemicals().find(c => c.name === name);
-    if (!chem || chem.quantity < totalAmount) {
-      totalChemCheck = false;
-      flashMessage(`Not enough ${name} in inventory`, "#e74c3c");
-    }
-
-    chemicals.push({ name, rate, amount: totalAmount, unit });
-  });
-
-  if (!totalChemCheck || !chemicals.length) return;
-
-  const batch = {
-    id: generateID("B"),
-    name,
-    date,
-    totalMix,
-    remainingMix: totalMix,
-    chemicals,
-    linkedJobs: jobLink ? [jobLink] : [],
-    dumped: false
+  window.BF_buildRow = function(container, idx, chemicalNames){
+    const temp = document.createElement("div");
+    temp.innerHTML = chemRowTemplate(idx, chemicalNames);
+    const row = temp.firstElementChild;
+    container.appendChild(row);
+    return row;
   };
 
-  // Deduct usage
-  chemicals.forEach(c => deductChemicalUsage(c.name, c.amount, c.unit));
-
-  saveBatch(batch);
-  showBatchSummary(batch);
-  showSpinner("Batch Saved");
-  loadBatchList();
-  document.getElementById("popup").remove();
-}
-
-// ---------- CANCEL ----------
-function cancelBatch() {
-  if (confirm("Cancel batch creation?")) document.getElementById("popup").remove();
-}
+  window.BF_recalc = function(container, totalL){
+    let summary = [];
+    [...container.querySelectorAll(".chem-row")].forEach(row=>{
+      const name = row.querySelector(".br_name").value.trim();
+      const rate = Number(row.querySelector(".br_rate").value)||0;
+      const unit = row.querySelector(".br_unit").value || "L";
+      const calc = (rate/100) * (Number(totalL)||0);
+      row.querySelector(".br_calc").value = calc ? `${calc.toFixed(2)} ${unit}` : "";
+      if (name && calc) summary.push({name, calc, unit});
+    });
+    return summary;
+  };
+})();
