@@ -1,93 +1,100 @@
-/* WeedTracker V61 Final Pilot — extras.js
-   - UI polish, spinner overlays, modal helpers
-   - Toast + summary card
-   - Delegated Open/Edit actions wiring
-*/
+// ---------- WeedTracker V63 - extras.js ---------- //
+// Popup management, notifications, and shared helpers
 
-(function () {
-  document.addEventListener("DOMContentLoaded", () => {
-    // ---------- Splash fade ----------
-    const splash = document.getElementById("splash");
-    setTimeout(() => splash?.classList.add("hide"), 900);
-    splash?.addEventListener("transitionend", () => splash.remove(), { once: true });
+// ---------- POPUP ----------
+function showPopup(title, content, allowClose = true) {
+  const existing = document.getElementById("popup");
+  if (existing) existing.remove();
 
-    // ---------- Spinner Overlay ----------
-    const overlay = document.getElementById("overlaySpinner");
-    const backdrop = document.getElementById("backdrop");
-    const overlayText = document.getElementById("overlayText");
+  const popup = document.createElement("div");
+  popup.classList.add("popup");
+  popup.id = "popup";
 
-    function showOverlay(text) {
-      overlayText.textContent = text;
-      backdrop.hidden = false;
-      overlay.hidden = false;
-    }
-    function hideOverlay() {
-      backdrop.hidden = true;
-      overlay.hidden = true;
-    }
-    window._WTOverlay = { show: showOverlay, hide: hideOverlay };
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  popup.appendChild(heading);
 
-    // ---------- Toast + Summary ----------
-    window._WTToast = function (msg, ms = 1600) {
-      const d = document.createElement("div");
-      d.textContent = msg;
-      Object.assign(d.style, {
-        position: "fixed",
-        bottom: "1.1rem",
-        left: "50%",
-        transform: "translateX(-50%)",
-        background: "#e9f9ea",
-        border: "1px solid #bfe6c6",
-        color: "#0a4f18",
-        padding: ".55rem .9rem",
-        borderRadius: "16px",
-        boxShadow: "0 2px 8px rgba(0,0,0,.25)",
-        zIndex: 9999,
-        fontWeight: 800,
-      });
-      document.body.appendChild(d);
-      setTimeout(() => d.remove(), ms);
-    };
+  const body = document.createElement("div");
+  body.innerHTML = content;
+  popup.appendChild(body);
 
-    window._WTSummary = function (title, lines = [], ms = 2200) {
-      const wrap = document.createElement("div");
-      wrap.innerHTML = `
-        <div style="
-          position:fixed;left:50%;top:18%;transform:translateX(-50%);
-          background:#ffffff;border:1px solid #d9e6d9;border-radius:14px;
-          box-shadow:0 14px 36px rgba(0,0,0,.18);
-          z-index:9999;padding:14px 18px;min-width:260px">
-          <div style="font-weight:900;color:#0c7d2b">${title}</div>
-          <div style="margin-top:6px;color:#1c3e1c;font-weight:700">
-            ${lines.map(l => `<div>${l}</div>`).join("")}
-          </div>
-        </div>`;
-      const el = wrap.firstElementChild;
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), ms);
-    };
+  if (allowClose) {
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "✖ Close";
+    closeBtn.classList.add("close");
+    closeBtn.onclick = () => popup.remove();
+    popup.appendChild(closeBtn);
+  }
 
-    // ---------- Simple modal helpers (close with X) ----------
-    document.body.addEventListener("click", (e) => {
-      const closeBtn = e.target.closest("[data-close-modal]");
-      if (closeBtn) {
-        const modal = closeBtn.closest(".modal");
-        if (modal) modal.remove();
-      }
-    });
+  document.body.appendChild(popup);
+}
 
-    // ---------- Home buttons (nav) ----------
-    document.querySelectorAll("[data-target]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-        document.getElementById(btn.dataset.target)?.classList.add("active");
-      });
-    });
-    document.querySelectorAll(".home-btn").forEach(b => {
-      b.addEventListener("click", () => {
-        document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-        document.getElementById("home")?.classList.add("active");
-      });
-    });
-  });
-})();
+// ---------- SPINNER ----------
+function showSpinner(msg = "Saving…") {
+  let spinner = document.getElementById("spinner");
+  if (!spinner) {
+    spinner = document.createElement("div");
+    spinner.id = "spinner";
+    document.body.appendChild(spinner);
+  }
+  spinner.textContent = msg;
+  spinner.style.display = "block";
+
+  setTimeout(() => {
+    spinner.style.display = "none";
+  }, 1800);
+}
+
+// ---------- TOAST (BOTTOM FLASH) ----------
+function flashMessage(message, color = "#4caf50") {
+  const msgBox = document.createElement("div");
+  msgBox.textContent = message;
+  msgBox.style.position = "fixed";
+  msgBox.style.bottom = "25px";
+  msgBox.style.left = "50%";
+  msgBox.style.transform = "translateX(-50%)";
+  msgBox.style.background = color;
+  msgBox.style.color = "#fff";
+  msgBox.style.padding = "10px 18px";
+  msgBox.style.borderRadius = "8px";
+  msgBox.style.fontWeight = "600";
+  msgBox.style.zIndex = "99999";
+  msgBox.style.boxShadow = "0 0 10px rgba(0,0,0,0.5)";
+  document.body.appendChild(msgBox);
+
+  setTimeout(() => msgBox.remove(), 2000);
+}
+
+// ---------- BATCH SUMMARY CARD ----------
+function showBatchSummary(batch) {
+  const content = `
+    <strong>Batch Created:</strong> ${batch.id}<br>
+    <strong>Date:</strong> ${batch.date}<br>
+    <strong>Total Mix:</strong> ${batch.totalMix} L<br>
+    <strong>Chemicals:</strong> ${batch.chemicals.map(c => `${c.name} (${c.amount}${c.unit})`).join(", ")}<br>
+    <strong>Remaining:</strong> ${batch.remainingMix ?? batch.totalMix} L
+  `;
+  flashMessage(`✅ Batch Saved: ${batch.id}`, "#2ecc71");
+  console.log("Batch summary:", content);
+}
+
+// ---------- GENERAL HELPERS ----------
+function generateID(prefix = "ID") {
+  return `${prefix}-${Math.floor(Math.random() * 99999)}-${Date.now()}`;
+}
+
+function formatDateTime() {
+  const now = new Date();
+  const d = now.toISOString().slice(0, 10);
+  const t = now.toTimeString().slice(0, 5);
+  return `${d}T${t}`;
+}
+
+function openPage(pageID) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.getElementById(pageID).classList.add("active");
+}
+
+function clearData() {
+  clearAllData();
+}
