@@ -1,127 +1,175 @@
-// ===============================
-// WeedTracker V60 Pilot Final
-// EXTRAS.JS – utility + helpers
-// ===============================
+/* =========================================================
+   WeedTracker V60 Pilot - extras.js
+   Utility helpers, weather, location, mapping & UI support
+   ========================================================= */
 
-function toast(msg) {
-  const host = document.getElementById("toastHost");
-  if (!host) return;
-  const div = document.createElement("div");
-  div.className = "toast";
-  div.textContent = msg;
-  host.appendChild(div);
-  setTimeout(() => div.remove(), 2500);
+/* ---------- GEOLOCATION & AUTONAME ---------- */
+async function getLocationAndAutoName(jobType) {
+  if (!navigator.geolocation) {
+    WTStorage.showToast("📵 Geolocation not supported");
+    return null;
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const locString = `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
+        const date = new Date();
+        const day = String(date.getDate()).padStart(2, "0");
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const year = String(date.getFullYear()).slice(-2);
+        const jobLetter = jobType ? jobType.charAt(0).toUpperCase() : "J";
+        const name = `AutoRoad${day}${month}${year}${jobLetter}`;
+
+        WTStorage.saveData("last_location", { latitude, longitude });
+        WTStorage.showToast("📍 Location captured");
+        resolve({ name, latitude, longitude });
+      },
+      (err) => {
+        console.error("GPS error:", err);
+        WTStorage.showToast("⚠️ Location failed");
+        resolve(null);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  });
 }
 
-function showSpinner(text = "Working…") {
-  const spinner = document.getElementById("spinner");
-  const spinnerText = document.getElementById("spinnerText");
-  spinnerText.textContent = text;
-  spinner.classList.remove("hidden");
-}
-function hideSpinner() {
-  document.getElementById("spinner").classList.add("hidden");
-}
+/* ---------- WEATHER ---------- */
+async function getWeatherAuto() {
+  const api = "https://api.open-meteo.com/v1/forecast";
+  const loc = WTStorage.loadData("last_location");
+  if (!loc) return { temp: "", humidity: "", windSpeed: "", windDir: "" };
 
-// Navigation
-function switchScreen(target) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(target).classList.add("active");
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-// Shortcuts
-function $(id) { return document.getElementById(id); }
-
-// Weather auto fill mock
-async function fetchWeather() {
   try {
-    const resp = await fetch("https://api.open-meteo.com/v1/forecast?latitude=-34.55&longitude=148.37&current_weather=true");
-    const data = await resp.json();
-    if (!data.current_weather) throw "bad";
-    $("wTemp").value = data.current_weather.temperature;
-    $("wWind").value = data.current_weather.windspeed;
-    $("wDir").value = data.current_weather.winddirection;
-    $("wHum").value = 55 + Math.round(Math.random() * 10); // placeholder humidity
-    toast("Weather updated 🌦️");
-  } catch {
-    toast("Weather unavailable ⚠️");
+    const res = await fetch(
+      `${api}?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`
+    );
+    const data = await res.json();
+    const c = data.current;
+    return {
+      temp: `${c.temperature_2m ?? ""}°C`,
+      humidity: `${c.relative_humidity_2m ?? ""}%`,
+      windSpeed: `${c.wind_speed_10m ?? ""} km/h`,
+      windDir: degToCompass(c.wind_direction_10m ?? 0),
+    };
+  } catch (e) {
+    console.error("Weather fetch error:", e);
+    return { temp: "", humidity: "", windSpeed: "", windDir: "" };
   }
 }
 
-// Generate autoname
-function generateAutoName(location, jobType) {
-  const now = new Date();
-  const d = String(now.getDate()).padStart(2, "0");
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const y = String(now.getFullYear()).slice(-2);
-  const prefix = location ? location.replace(/\s+/g, "") : "Unknown";
-  const suffix = jobType === "inspection" ? "I" : jobType === "roadspray" ? "R" : "S";
-  return `${prefix}${d}${m}${y}${suffix}`;
+/* ---------- WIND DIRECTION CONVERSION ---------- */
+function degToCompass(num) {
+  const val = Math.floor(num / 22.5 + 0.5);
+  const dirs = [
+    "N",
+    "NNE",
+    "NE",
+    "ENE",
+    "E",
+    "ESE",
+    "SE",
+    "SSE",
+    "S",
+    "SSW",
+    "SW",
+    "WSW",
+    "W",
+    "WNW",
+    "NW",
+    "NNW",
+  ];
+  return `${dirs[val % 16]} (${Math.round(num)}°)`;
 }
 
-// Spinner success
-function spinnerDone(msg = "Done ✅") {
-  const spinnerText = document.getElementById("spinnerText");
-  spinnerText.textContent = msg;
-  setTimeout(() => hideSpinner(), 1200);
-}
+/* ---------- MAP INITIALIZATION ---------- */
+let map, userMarker, pinsLayer;
 
-// Map helper
 function initMap() {
-  const map = L.map("mapHost", { center: [-34.55, 148.37], zoom: 11 });
+  const mapEl = document.getElementById("map");
+  if (!mapEl) return;
+  WTStorage.showSpinner(true, "Loading map…");
+
+  setTimeout(() => {
+    WTStorage.showSpinner(false);
+  }, 1000);
+
+  if (!window.L) {
+    WTStorage.showToast("⚠️ Map library missing");
+    return;
+  }
+
+  map = L.map("map").setView([-34.55, 148.37], 12);
+
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap"
+    attribution: "© OpenStreetMap",
+    maxZoom: 19,
   }).addTo(map);
-  return map;
+
+  pinsLayer = L.layerGroup().addTo(map);
+  map.locate({ setView: true, maxZoom: 15 });
+
+  map.on("locationfound", (e) => {
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.marker(e.latlng)
+      .addTo(map)
+      .bindPopup("📍 You are here")
+      .openPopup();
+  });
+
+  renderMapPins();
 }
 
-// Notification mock
-function notify(msg) {
-  try {
-    if (Notification.permission === "granted") {
-      new Notification(msg);
-    } else if (Notification.permission !== "denied") {
-      Notification.requestPermission().then(p => {
-        if (p === "granted") new Notification(msg);
-      });
+/* ---------- PINS RENDER ---------- */
+function renderMapPins() {
+  if (!pinsLayer) return;
+  pinsLayer.clearLayers();
+  const records = WTStorage.loadData("records", []);
+  records.forEach((r) => {
+    if (r.lat && r.lng) {
+      const pin = L.marker([r.lat, r.lng]).addTo(pinsLayer);
+      pin.bindPopup(
+        `<b>${r.jobName}</b><br>${r.date}<br>${r.weed ?? ""}<br>
+        <button onclick="navigateTo(${r.lat},${r.lng})">Navigate</button>`
+      );
     }
-  } catch { /* ignore */ }
+  });
 }
 
-// Add “close” X to all popups dynamically
-function addPopupClose(btnTarget) {
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "✖";
-  closeBtn.className = "pill warn";
-  closeBtn.style.float = "right";
-  closeBtn.onclick = () => document.getElementById(btnTarget).remove();
-  return closeBtn;
+/* ---------- APPLE MAPS NAVIGATION ---------- */
+function navigateTo(lat, lng) {
+  const url = `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`;
+  window.open(url, "_blank");
 }
 
-// Validation helper
-function checkInventory(chemName, neededAmt) {
-  const chems = getChemicals();
-  const chem = chems.find(c => c.name === chemName);
-  if (!chem) {
-    toast(`❌ ${chemName} not found in inventory`);
-    return false;
-  }
-  if (chem.amount < neededAmt) {
-    toast(`⚠️ Not enough ${chemName} in stock`);
-    return false;
-  }
-  return true;
+/* ---------- UI HELPERS ---------- */
+function closeSheet(id) {
+  const sheet = document.getElementById(id);
+  if (sheet) sheet.style.display = "none";
 }
 
-// Link generator
-function linkJobs(jobID, linkTo) {
-  const jobs = getJobs();
-  const job = jobs.find(j => j.id === jobID);
-  const linked = jobs.find(j => j.id === linkTo);
-  if (job && linked) {
-    job.linked = linkTo;
-    toast(`🔗 Linked ${job.jobName} → ${linked.jobName}`);
-    setJobs(jobs);
-  }
+function openSheet(id) {
+  const sheet = document.getElementById(id);
+  if (sheet) sheet.style.display = "flex";
 }
+
+/* ---------- Init ---------- */
+window.addEventListener("DOMContentLoaded", () => {
+  WTStorage.initDefaults();
+  const mapEl = document.getElementById("map");
+  if (mapEl) initMap();
+});
+
+/* ---------- EXPORT ---------- */
+window.WTExtras = {
+  getLocationAndAutoName,
+  getWeatherAuto,
+  degToCompass,
+  initMap,
+  renderMapPins,
+  navigateTo,
+  openSheet,
+  closeSheet,
+};
