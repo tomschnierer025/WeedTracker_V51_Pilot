@@ -1,137 +1,127 @@
-// WeedTracker V60 Pilot — extras.js
-// UI polish, timestamp logic, spinners, color themes, and utilities.
+// ===============================
+// WeedTracker V60 Pilot Final
+// EXTRAS.JS – utility + helpers
+// ===============================
 
-// =============== THEME & STYLING ===============
-document.addEventListener("DOMContentLoaded", () => {
-  document.body.classList.add("dark-theme");
-});
-
-// =============== SPINNER HANDLER ===============
-const spinnerOverlay = document.createElement("div");
-spinnerOverlay.id = "spinnerOverlay";
-spinnerOverlay.style.cssText = `
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  color: white;
-  font-size: 20px;
-  font-weight: bold;
-`;
-spinnerOverlay.innerHTML = `<div class="spinner">⏳ Saving...</div>`;
-document.body.appendChild(spinnerOverlay);
-
-function showSpinner(text = "Saving...") {
-  spinnerOverlay.querySelector(".spinner").textContent = text;
-  spinnerOverlay.style.display = "flex";
+function toast(msg) {
+  const host = document.getElementById("toastHost");
+  if (!host) return;
+  const div = document.createElement("div");
+  div.className = "toast";
+  div.textContent = msg;
+  host.appendChild(div);
+  setTimeout(() => div.remove(), 2500);
 }
 
+function showSpinner(text = "Working…") {
+  const spinner = document.getElementById("spinner");
+  const spinnerText = document.getElementById("spinnerText");
+  spinnerText.textContent = text;
+  spinner.classList.remove("hidden");
+}
 function hideSpinner() {
-  spinnerOverlay.style.display = "none";
+  document.getElementById("spinner").classList.add("hidden");
 }
 
-// =============== TOAST NOTIFICATION ===============
-function showToast(message, duration = 2500) {
-  let toast = document.getElementById("toast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "toast";
-    document.body.appendChild(toast);
+// Navigation
+function switchScreen(target) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(target).classList.add("active");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// Shortcuts
+function $(id) { return document.getElementById(id); }
+
+// Weather auto fill mock
+async function fetchWeather() {
+  try {
+    const resp = await fetch("https://api.open-meteo.com/v1/forecast?latitude=-34.55&longitude=148.37&current_weather=true");
+    const data = await resp.json();
+    if (!data.current_weather) throw "bad";
+    $("wTemp").value = data.current_weather.temperature;
+    $("wWind").value = data.current_weather.windspeed;
+    $("wDir").value = data.current_weather.winddirection;
+    $("wHum").value = 55 + Math.round(Math.random() * 10); // placeholder humidity
+    toast("Weather updated 🌦️");
+  } catch {
+    toast("Weather unavailable ⚠️");
   }
-  toast.textContent = message;
-  toast.style.display = "block";
-  toast.style.background = "#333";
-  toast.style.color = "white";
-  toast.style.padding = "10px 20px";
-  toast.style.borderRadius = "5px";
-  toast.style.position = "fixed";
-  toast.style.bottom = "25px";
-  toast.style.left = "50%";
-  toast.style.transform = "translateX(-50%)";
-  toast.style.zIndex = "10000";
-  setTimeout(() => (toast.style.display = "none"), duration);
 }
 
-// =============== AUTO TIMESTAMP ===============
-function getTimestamp() {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const year = now.getFullYear();
-  const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return `${day}/${month}/${year} ${time}`;
-}
-
-function appendTimestamp(elId, label = "Timestamp") {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  const stamp = document.createElement("small");
-  stamp.textContent = `${label}: ${getTimestamp()}`;
-  stamp.style.color = "#aaa";
-  el.appendChild(stamp);
-}
-
-// =============== BUTTON FEEDBACK ===============
-function flashButton(button, color = "#4CAF50") {
-  const original = button.style.backgroundColor;
-  button.style.backgroundColor = color;
-  setTimeout(() => (button.style.backgroundColor = original), 400);
-}
-
-// =============== JOB NAMING FORMAT ===============
-function formatJobName(roadName, typeLetter) {
+// Generate autoname
+function generateAutoName(location, jobType) {
   const now = new Date();
   const d = String(now.getDate()).padStart(2, "0");
   const m = String(now.getMonth() + 1).padStart(2, "0");
-  const y = now.getFullYear().toString().slice(-2);
-  return `${roadName.replace(/\s+/g, "_")}_${d}${m}${y}_${typeLetter}`;
+  const y = String(now.getFullYear()).slice(-2);
+  const prefix = location ? location.replace(/\s+/g, "") : "Unknown";
+  const suffix = jobType === "inspection" ? "I" : jobType === "roadspray" ? "R" : "S";
+  return `${prefix}${d}${m}${y}${suffix}`;
 }
 
-// =============== SCROLL FIX FOR iPHONE ===============
-document.addEventListener("touchmove", e => {
-  if (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA") {
-    e.stopPropagation();
-  }
-}, { passive: true });
-
-// =============== MAP MARKER COLORS ===============
-function mapColorByType(type) {
-  switch (type) {
-    case "Inspection": return "blue";
-    case "Spot Spray": return "green";
-    case "Road Spray": return "yellow";
-    default: return "gray";
-  }
+// Spinner success
+function spinnerDone(msg = "Done ✅") {
+  const spinnerText = document.getElementById("spinnerText");
+  spinnerText.textContent = msg;
+  setTimeout(() => hideSpinner(), 1200);
 }
 
-// =============== BATCH STATUS COLORS ===============
-function batchStatusRing(batch) {
-  const remaining = parseFloat(batch.remaining || 0);
-  if (remaining <= 0) return "🔴 Used (0L left)";
-  if (remaining < batch.totalMix * 0.3) return "🟠 Low";
-  return "🟢 Available";
+// Map helper
+function initMap() {
+  const map = L.map("mapHost", { center: [-34.55, 148.37], zoom: 11 });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap"
+  }).addTo(map);
+  return map;
 }
 
-// =============== WEATHER MOCK (AUTO-FILL) ===============
-async function autoWeather() {
+// Notification mock
+function notify(msg) {
   try {
-    const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=-34.65&longitude=148.33&current_weather=true");
-    const data = await res.json();
-    const w = data.current_weather;
-    return {
-      temp: `${w.temperature}°C`,
-      wind: `${w.windspeed} km/h`,
-      direction: w.winddirection + "°"
-    };
-  } catch {
-    return { temp: "N/A", wind: "N/A", direction: "N/A" };
-  }
+    if (Notification.permission === "granted") {
+      new Notification(msg);
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then(p => {
+        if (p === "granted") new Notification(msg);
+      });
+    }
+  } catch { /* ignore */ }
 }
 
-// =============== FINAL INTEGRATION ===============
-window.addEventListener("beforeunload", () => {
-  hideSpinner();
-});
+// Add “close” X to all popups dynamically
+function addPopupClose(btnTarget) {
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "✖";
+  closeBtn.className = "pill warn";
+  closeBtn.style.float = "right";
+  closeBtn.onclick = () => document.getElementById(btnTarget).remove();
+  return closeBtn;
+}
+
+// Validation helper
+function checkInventory(chemName, neededAmt) {
+  const chems = getChemicals();
+  const chem = chems.find(c => c.name === chemName);
+  if (!chem) {
+    toast(`❌ ${chemName} not found in inventory`);
+    return false;
+  }
+  if (chem.amount < neededAmt) {
+    toast(`⚠️ Not enough ${chemName} in stock`);
+    return false;
+  }
+  return true;
+}
+
+// Link generator
+function linkJobs(jobID, linkTo) {
+  const jobs = getJobs();
+  const job = jobs.find(j => j.id === jobID);
+  const linked = jobs.find(j => j.id === linkTo);
+  if (job && linked) {
+    job.linked = linkTo;
+    toast(`🔗 Linked ${job.jobName} → ${linked.jobName}`);
+    setJobs(jobs);
+  }
+}
