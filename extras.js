@@ -1,109 +1,137 @@
-/* ===== WeedTracker V60 Pilot — extras.js ===== */
-window.$ = (sel, ctx=document) => ctx.querySelector(sel);
-window.$$ = (sel, ctx=document) => [...ctx.querySelectorAll(sel)];
+// WeedTracker V60 Pilot — extras.js
+// UI polish, timestamp logic, spinners, color themes, and utilities.
 
-function showSpinner(text='Saving…'){ $('#spinnerText').textContent=text; $('#spinner').classList.remove('hidden'); }
-function hideSpinner(){ $('#spinner').classList.add('hidden'); }
-function toast(msg, ms=2000){
-  const host = $('#toastHost');
-  const el = document.createElement('div');
-  el.className='toast'; el.textContent=msg;
-  host.appendChild(el);
-  setTimeout(()=> el.remove(), ms);
+// =============== THEME & STYLING ===============
+document.addEventListener("DOMContentLoaded", () => {
+  document.body.classList.add("dark-theme");
+});
+
+// =============== SPINNER HANDLER ===============
+const spinnerOverlay = document.createElement("div");
+spinnerOverlay.id = "spinnerOverlay";
+spinnerOverlay.style.cssText = `
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+`;
+spinnerOverlay.innerHTML = `<div class="spinner">⏳ Saving...</div>`;
+document.body.appendChild(spinnerOverlay);
+
+function showSpinner(text = "Saving...") {
+  spinnerOverlay.querySelector(".spinner").textContent = text;
+  spinnerOverlay.style.display = "flex";
 }
 
-function fmtDate(d){ return new Date(d).toLocaleDateString('en-AU',{day:'2-digit',month:'2-digit',year:'numeric'}); }
-function ddmmyy(dateObj){
-  const d = new Date(dateObj);
-  const dd = String(d.getDate()).padStart(2,'0');
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const yy = String(d.getFullYear()).slice(-2);
-  return `${dd}${mm}${yy}`;
+function hideSpinner() {
+  spinnerOverlay.style.display = "none";
 }
 
-function typeLetter(t){
-  if (t === 'Road Spray') return 'R';
-  if (t === 'Spot Spray') return 'S';
-  if (t === 'Slash') return 'L';
-  return 'I'; // Inspection
+// =============== TOAST NOTIFICATION ===============
+function showToast(message, duration = 2500) {
+  let toast = document.getElementById("toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.style.display = "block";
+  toast.style.background = "#333";
+  toast.style.color = "white";
+  toast.style.padding = "10px 20px";
+  toast.style.borderRadius = "5px";
+  toast.style.position = "fixed";
+  toast.style.bottom = "25px";
+  toast.style.left = "50%";
+  toast.style.transform = "translateX(-50%)";
+  toast.style.zIndex = "10000";
+  setTimeout(() => (toast.style.display = "none"), duration);
 }
 
-function getRoadFromGeocode(addr=''){
-  // very simple road extractor
-  const m = addr.match(/([A-Za-z'\- ]+)\s(Road|Rd|Street|St|Avenue|Ave|Lane|Ln|Way|Track|Hwy)/i);
-  return m ? `${m[1].trim().replace(/\s+/g,'')}${m[2][0]}` : 'UnknownRoad';
+// =============== AUTO TIMESTAMP ===============
+function getTimestamp() {
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, "0");
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const year = now.getFullYear();
+  const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `${day}/${month}/${year} ${time}`;
 }
 
-async function geolocate(){
-  return new Promise((resolve,reject)=>{
-    navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:8000});
-  });
+function appendTimestamp(elId, label = "Timestamp") {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const stamp = document.createElement("small");
+  stamp.textContent = `${label}: ${getTimestamp()}`;
+  stamp.style.color = "#aaa";
+  el.appendChild(stamp);
 }
 
-async function reverseGeocode(lat, lng){
-  // simple/robust free endpoint (osm) – no key required
-  try{
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
-    const j = await r.json();
-    return j.display_name || '';
-  }catch{ return ''; }
+// =============== BUTTON FEEDBACK ===============
+function flashButton(button, color = "#4CAF50") {
+  const original = button.style.backgroundColor;
+  button.style.backgroundColor = color;
+  setTimeout(() => (button.style.backgroundColor = original), 400);
 }
 
-function ensureWeedOptions(select){
-  // Always include Cape Broom and the noxious list, with yellow diamond marker
-  const weeds = [
-    'African Boxthorn (noxious)',
-    'African Lovegrass (noxious)',
-    'Bathurst Burr (noxious)',
-    'Blackberry (noxious)',
-    'Cape Broom (noxious)',
-    'Chilean Needle Grass (noxious)',
-    'Coolatai Grass (noxious)',
-    'Fireweed (noxious)',
-    'Gorse (noxious)',
-    'Lantana (noxious)',
-    'Patterson’s Curse (noxious)'
-  ];
-  select.innerHTML = '<option value="">— Select Weed —</option>' +
-    weeds.map(w=>`<option>${w}</option>`).join('');
+// =============== JOB NAMING FORMAT ===============
+function formatJobName(roadName, typeLetter) {
+  const now = new Date();
+  const d = String(now.getDate()).padStart(2, "0");
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const y = now.getFullYear().toString().slice(-2);
+  return `${roadName.replace(/\s+/g, "_")}_${d}${m}${y}_${typeLetter}`;
 }
 
-function selectFill(select, items, getLabel, getValue){
-  select.innerHTML = '<option value="">— Select —</option>' + items.map(i=>(
-    `<option value="${getValue(i)}">${getLabel(i)}</option>`
-  )).join('');
+// =============== SCROLL FIX FOR iPHONE ===============
+document.addEventListener("touchmove", e => {
+  if (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA") {
+    e.stopPropagation();
+  }
+}, { passive: true });
+
+// =============== MAP MARKER COLORS ===============
+function mapColorByType(type) {
+  switch (type) {
+    case "Inspection": return "blue";
+    case "Spot Spray": return "green";
+    case "Road Spray": return "yellow";
+    default: return "gray";
+  }
 }
 
-/* Map helper */
-function newMap(el){
-  const map = L.map(el, { zoomControl: true });
-  // Light, high-contrast tiles for outdoor visibility
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-  map.setView([-34.64, 148.03], 12);
-  return map;
+// =============== BATCH STATUS COLORS ===============
+function batchStatusRing(batch) {
+  const remaining = parseFloat(batch.remaining || 0);
+  if (remaining <= 0) return "🔴 Used (0L left)";
+  if (remaining < batch.totalMix * 0.3) return "🟠 Low";
+  return "🟢 Available";
 }
 
-/* Simple id */
-const uid = (p='id') => p + Math.random().toString(36).slice(2,8);
-
-/* Popup modal */
-function modal(html){
-  const host = $('#popupHost');
-  const box = document.createElement('div');
-  box.className = 'card';
-  box.style.position='fixed'; box.style.left='50%'; box.style.top='10%';
-  box.style.transform='translateX(-50%)'; box.style.width='min(92vw, 720px)';
-  box.style.maxHeight='80vh'; box.style.overflow='auto'; box.style.zIndex='80';
-  box.innerHTML = html;
-  host.appendChild(box);
-  const close = ()=> box.remove();
-  box.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', close));
-  return { close, el: box };
+// =============== WEATHER MOCK (AUTO-FILL) ===============
+async function autoWeather() {
+  try {
+    const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=-34.65&longitude=148.33&current_weather=true");
+    const data = await res.json();
+    const w = data.current_weather;
+    return {
+      temp: `${w.temperature}°C`,
+      wind: `${w.windspeed} km/h`,
+      direction: w.winddirection + "°"
+    };
+  } catch {
+    return { temp: "N/A", wind: "N/A", direction: "N/A" };
+  }
 }
 
-/* Export */
-window.WT = {
-  toast, showSpinner, hideSpinner, ddmmyy, typeLetter,
-  geolocate, reverseGeocode, getRoadFromGeocode,
-  ensureWeedOptions, selectFill, newMap, uid
-};
+// =============== FINAL INTEGRATION ===============
+window.addEventListener("beforeunload", () => {
+  hideSpinner();
+});
