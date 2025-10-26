@@ -2,331 +2,365 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>WeedTracker V60 Pilot</title>
 
+  <!-- Styles -->
   <link rel="stylesheet" href="styles.css"/>
 
   <!-- Leaflet (Map) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-
-  <!-- Data & Logic (order matters) -->
-  <script src="storage.js" defer></script>
-  <script src="extras.js" defer></script>
-  <script src="settings.js" defer></script>
-  <script src="apps.js" defer></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
-<body class="theme-dark">
 
-  <!-- Spinner overlay -->
-  <div id="spinner" class="spinner-overlay hidden">
+<body class="theme-dark">
+  <!-- ================== GLOBAL SPINNER ================== -->
+  <div id="spinner" class="spinner-overlay hidden" aria-live="polite">
     <div class="spinner"></div>
-    <div id="spinnerText" class="spinner-text">Loading…</div>
+    <div id="spinnerText" class="spinner-text">Working…</div>
   </div>
 
-  <!-- Toasts -->
+  <!-- ================== TOAST HOST ================== -->
   <div id="toastHost"></div>
 
-  <!-- Header -->
+  <!-- ================== HEADER ================== -->
   <header class="app-header">
     <h1>🌿 WeedTracker V60 Pilot</h1>
-    <button id="homeBtn" class="icon-btn" title="Home" aria-label="Home">🏠</button>
+    <button id="homeBtn" class="icon-btn" title="Home">🏠</button>
   </header>
 
-  <!-- HOME -->
+  <!-- ================== HOME ================== -->
   <main id="home" class="screen active">
-    <section class="stack">
-      <button class="nav-card" data-target="createTask">📝 Create Task</button>
-      <button class="nav-card" data-target="records">📄 Records</button>
-      <button class="nav-card" data-target="inventory">💧 Chemical Inventory</button>
-      <button class="nav-card" data-target="batches">🧪 Batches</button>
-      <button class="nav-card" data-target="procurement">🛒 Procurement List</button>
-      <button class="nav-card" data-target="mapping">🗺️ Mapping</button>
-      <button class="nav-card" data-target="settings">⚙️ Settings</button>
+    <section class="home-grid">
+      <button class="home-tile accent-blue"   data-target="create">📝 Create Task</button>
+      <button class="home-tile accent-cyan"   data-target="records">📄 Records</button>
+      <button class="home-tile accent-teal"   data-target="inventory">🧪 Chemical Inventory</button>
+      <button class="home-tile accent-green"  data-target="batches">⚗️ Batches</button>
+      <button class="home-tile accent-sand"   data-target="procure">🛒 Procurement List</button>
+      <button class="home-tile accent-map"    data-target="mapping">🗺️ Mapping</button>
+      <button class="home-tile accent-slate"  data-target="settings">⚙️ Settings</button>
     </section>
   </main>
 
-  <!-- CREATE TASK (single-column, phone friendly) -->
-  <main id="createTask" class="screen">
-    <section class="page">
-      <h2>Create Task</h2>
+  <!-- ================== CREATE TASK ================== -->
+  <main id="create" class="screen">
+    <h2>Create Task</h2>
 
-      <div class="card">
-        <div class="row">
-          <div class="col">
-            <label class="lbl">Auto-Name</label>
-            <div class="chip-row">
-              <button id="btnLocate" class="chip">📍 Locate</button>
-              <span id="geoStatus" class="muted">Not set</span>
-              <button id="btnAutoName" class="chip">Auto Name</button>
-            </div>
-            <input id="jobName" class="input" type="text" placeholder="Job name (editable)"/>
-            <input id="councilJob" class="input" type="text" placeholder="Council Job Number (optional)"/>
+    <form id="taskForm" class="form">
+      <!-- EXACT ORDER YOU SPECIFIED -->
+      <div class="field">
+        <label for="taskType">Task Type</label>
+        <select id="taskType" required>
+          <option value="Inspection">Inspection</option>
+          <option value="Road Spray">Road Spray</option>
+          <option value="Spot Spray">Spot Spray</option>
+        </select>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Location</label>
+          <div class="row gap">
+            <button id="locateBtn" type="button" class="btn pill">📍 Locate</button>
+            <span id="locRoad" class="muted">—</span>
           </div>
         </div>
-
-        <div class="row">
-          <div class="col">
-            <label class="lbl">Date</label>
-            <input id="dateInput" class="input" type="datetime-local"/>
-          </div>
+        <div class="field">
+          <label>Auto-Name</label>
+          <button id="autoNameBtn" type="button" class="btn pill">🔤 Auto Name</button>
         </div>
+      </div>
 
-        <div class="row two">
-          <div class="col">
-            <label class="lbl">Start</label>
-            <input id="startTime" class="input" type="time"/>
-          </div>
-          <div class="col">
-            <label class="lbl">Finish</label>
-            <input id="finishTime" class="input" type="time"/>
-          </div>
+      <div class="field">
+        <label for="jobName">Job Name</label>
+        <input id="jobName" placeholder="(auto)"/>
+      </div>
+
+      <div class="field">
+        <label for="councilNum">Council Job Number (optional)</label>
+        <input id="councilNum" placeholder="e.g. 25/1234"/>
+      </div>
+
+      <div class="field">
+        <label for="jobDate">Date</label>
+        <input id="jobDate" type="date" required/>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="startTime">Start Time</label>
+          <input id="startTime" type="time"/>
         </div>
-
-        <div class="row two">
-          <div class="col">
-            <label class="lbl">Task Type</label>
-            <select id="taskType" class="input">
-              <option value="Inspection">Inspection</option>
-              <option value="Road Spray">Road Spray</option>
-              <option value="Spot Spray">Spot Spray</option>
-              <option value="Slash">Slash</option>
-            </select>
-          </div>
-          <div class="col">
-            <label class="lbl">Weed</label>
-            <select id="weedType" class="input"></select>
-          </div>
+        <div class="field">
+          <label for="endTime">Finish Time</label>
+          <input id="endTime" type="time"/>
         </div>
+      </div>
 
-        <div class="row two">
-          <div class="col">
-            <label class="lbl">Batch</label>
-            <select id="taskBatch" class="input"></select>
-          </div>
-          <div class="col">
-            <label class="lbl">Link Existing Job # (optional)</label>
-            <input id="linkJobId" class="input" placeholder="e.g. RS12122025_WombatRd"/>
-          </div>
-        </div>
+      <div class="field">
+        <label for="weedSelect">Weed</label>
+        <select id="weedSelect">
+          <option value="">— Select Weed —</option>
+        </select>
+      </div>
 
-        <div class="row">
-          <div class="col">
-            <label class="lbl">Inspection # (optional)</label>
-            <input id="mergeInspectionId" class="input" placeholder="Inspection ID to merge"/>
-          </div>
-        </div>
+      <div class="field">
+        <label for="batchSelect">Batch</label>
+        <select id="batchSelect">
+          <option value="">— Select Batch —</option>
+        </select>
+      </div>
 
+      <div class="field">
+        <label for="linkJob">Link Existing Job # (optional)</label>
+        <input id="linkJob" placeholder="paste job ID/name to link"/>
+      </div>
+
+      <div class="field">
+        <label for="linkInspectionId">Inspection # (optional)</label>
+        <input id="linkInspectionId" placeholder="paste inspection ID to merge"/>
+      </div>
+
+      <!-- WEATHER -->
+      <section class="card p">
         <h3>Weather</h3>
-        <div class="row four">
-          <div class="col"><label class="lbl">Temp (°C)</label><input id="wTemp" class="input" inputmode="decimal"/></div>
-          <div class="col"><label class="lbl">Wind (km/h)</label><input id="wWind" class="input" inputmode="decimal"/></div>
-          <div class="col"><label class="lbl">Wind Dir (deg)</label><input id="wDir" class="input" inputmode="numeric"/></div>
-          <div class="col"><label class="lbl">Humidity (%)</label><input id="wHum" class="input" inputmode="decimal"/></div>
-        </div>
-        <button id="btnAutoWeather" class="chip">🌤️ Auto Weather</button>
-
-        <label class="lbl mt">Notes</label>
-        <textarea id="notes" class="input" rows="4" placeholder="Notes / observations"></textarea>
-
-        <div class="row two mt">
-          <div class="col">
-            <label class="lbl">Status</label>
-            <select id="status" class="input">
-              <option value="Incomplete">Incomplete</option>
-              <option value="Complete">Complete</option>
-            </select>
+        <div class="field-row">
+          <div class="field">
+            <label for="temp">Temp (°C)</label>
+            <input id="temp" inputmode="decimal" placeholder="°C"/>
           </div>
-          <div class="col">
-            <label class="lbl">Reminder (weeks)</label>
-            <select id="reminder" class="input">
-              <option>1</option><option>2</option><option>3</option><option>4</option>
-            </select>
+          <div class="field">
+            <label for="humidity">Humidity (%)</label>
+            <input id="humidity" inputmode="decimal" placeholder="%"/>
           </div>
         </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="wind">Wind (km/h)</label>
+            <input id="wind" inputmode="decimal" placeholder="km/h"/>
+          </div>
+          <div class="field">
+            <label for="windDir">Wind Direction</label>
+            <input id="windDir" placeholder="e.g. NE 45°"/>
+          </div>
+        </div>
+        <div class="row gap">
+          <button id="autoWeatherBtn" type="button" class="btn pill">🌦 Auto Weather</button>
+          <small id="wxUpdated" class="muted"></small>
+        </div>
+      </section>
 
-        <div class="btn-row">
-          <button id="btnSaveTask" class="btn primary">💾 Save</button>
-          <button id="btnDraftTask" class="btn">📝 Save as Draft</button>
+      <!-- ROADSIDE TRACKING (shown only for Road Spray by JS) -->
+      <section id="roadTrackBlock" class="card p" style="display:none">
+        <h3>Roadside Tracking</h3>
+        <div class="row gap">
+          <button id="startTrack" type="button" class="btn pill">▶︎ Start</button>
+          <button id="stopTrack"  type="button" class="btn pill warn">■ Stop</button>
+          <span id="trackStatus" class="muted">Idle</span>
+        </div>
+        <small class="muted" id="trackKm">Distance: 0.00 km</small>
+      </section>
+
+      <!-- PHOTO -->
+      <section class="card p">
+        <h3>Photo</h3>
+        <input id="photoInput" type="file" accept="image/*" capture="environment"/>
+        <img id="photoPreview" alt="preview" style="display:none;max-width:100%;margin-top:.5rem;border-radius:8px"/>
+      </section>
+
+      <!-- STATUS & REMINDER -->
+      <div class="field-row">
+        <div class="field">
+          <label>Status</label>
+          <div class="row gap">
+            <label class="chip"><input type="radio" name="status" value="Complete"> Complete</label>
+            <label class="chip"><input type="radio" name="status" value="Incomplete" checked> Incomplete</label>
+            <label class="chip"><input type="radio" name="status" value="Draft"> Draft</label>
+          </div>
+        </div>
+        <div class="field">
+          <label for="reminderWeeks">Reminder (weeks)</label>
+          <select id="reminderWeeks"></select>
         </div>
       </div>
-    </section>
+
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" rows="4" placeholder="Job notes…"></textarea>
+      </div>
+
+      <div class="row gap end">
+        <button id="saveDraft" type="button" class="btn">💾 Save Draft</button>
+        <button id="saveTask"  type="button" class="btn primary">✅ Save Task</button>
+      </div>
+    </form>
   </main>
 
-  <!-- RECORDS -->
+  <!-- ================== RECORDS ================== -->
   <main id="records" class="screen">
-    <section class="page">
-      <h2>Records</h2>
+    <h2>Records</h2>
 
-      <div class="card soft">
-        <details open>
-          <summary>Filters</summary>
-          <input id="recSearch" class="input" placeholder="Search (road, name, weed, council, batch)"/>
-          <div class="row three">
-            <div class="col"><label class="lbl">Type</label>
-              <select id="recType" class="input">
-                <option value="All">All</option>
-                <option>Inspection</option>
-                <option>Road Spray</option>
-                <option>Spot Spray</option>
-                <option>Slash</option>
-              </select>
-            </div>
-            <div class="col"><label class="lbl">From (Date)</label><input id="recFrom" class="input" type="date"/></div>
-            <div class="col"><label class="lbl">To (Date)</label><input id="recTo" class="input" type="date"/></div>
+    <details class="filters">
+      <summary>Filters & Search</summary>
+      <div class="filter-grid">
+        <input id="recSearch" placeholder="Search job / road / weed / council #"/>
+        <div class="row gap">
+          <label class="chip"><input id="fInspection" type="checkbox"> Inspection</label>
+          <label class="chip"><input id="fRoad"       type="checkbox"> Road Spray</label>
+          <label class="chip"><input id="fSpot"       type="checkbox"> Spot Spray</label>
+        </div>
+        <div class="row gap">
+          <label class="chip"><input id="fComplete"   type="checkbox"> Complete</label>
+          <label class="chip"><input id="fIncomplete" type="checkbox"> Incomplete</label>
+          <label class="chip"><input id="fDraft"      type="checkbox"> Draft</label>
+        </div>
+        <div class="row gap">
+          <div class="field compact">
+            <label>From</label><input id="recFrom" type="date"/>
           </div>
-          <div class="row two">
-            <div class="col"><label class="lbl">Status</label>
-              <select id="recStatus" class="input">
-                <option value="All">All</option>
-                <option>Complete</option>
-                <option>Incomplete</option>
-              </select>
-            </div>
-            <div class="col btn-row-right">
-              <button id="btnRecSearch" class="btn primary">🔍 Search</button>
-              <button id="btnRecReset" class="btn danger">♻️ Reset</button>
-            </div>
+          <div class="field compact">
+            <label>To</label><input id="recTo" type="date"/>
           </div>
-        </details>
-      </div>
-
-      <div id="recList" class="stack"></div>
-    </section>
-  </main>
-
-  <!-- INVENTORY -->
-  <main id="inventory" class="screen">
-    <section class="page">
-      <h2>Chemical Inventory</h2>
-
-      <div class="card soft">
-        <div class="row between">
-          <div><b>SDS Portal</b></div>
-          <a class="btn" target="_blank" href="https://online.chemwatch.net">Open Chemwatch</a>
+        </div>
+        <div class="row gap end">
+          <button id="recSearchBtn" type="button" class="btn">🔎 Search</button>
+          <button id="recResetBtn"  type="button" class="btn">♻️ Reset</button>
         </div>
       </div>
+    </details>
 
-      <div class="btn-row">
-        <button id="btnAddChem" class="btn primary">➕ Add chemical</button>
-      </div>
-
-      <div id="chemList" class="stack"></div>
-    </section>
+    <section id="recordsList" class="list"></section>
   </main>
 
-  <!-- BATCHES -->
+  <!-- ================== BATCHES ================== -->
   <main id="batches" class="screen">
-    <section class="page">
-      <h2>Batches</h2>
+    <h2>Batches</h2>
 
-      <!-- Create Batch on ONE PAGE -->
-      <div class="card">
-        <h3>Create Batch</h3>
-        <div class="row">
-          <div class="col"><label class="lbl">Auto-Name</label><input id="batchName" class="input" placeholder="Auto or custom"/></div>
+    <details class="filters">
+      <summary>Filters</summary>
+      <div class="filter-grid">
+        <div class="row gap">
+          <div class="field compact">
+            <label>From</label><input id="batFrom" type="date"/>
+          </div>
+          <div class="field compact">
+            <label>To</label><input id="batTo" type="date"/>
+          </div>
         </div>
-        <div class="row two">
-          <div class="col"><label class="lbl">Date</label><input id="batchDate" class="input" type="date"/></div>
-          <div class="col"><label class="lbl">Total mix (L)</label><input id="batchTotal" class="input" inputmode="decimal" value="600"/></div>
-        </div>
-
-        <div id="chemLines" class="stack bordered"></div>
-        <div class="btn-row">
-          <button id="btnAddLine" class="btn">➕ Add chemical</button>
-        </div>
-
-        <div class="summary-row">
-          <div><b>Total used:</b> <span id="sumUsed">0.000 L</span></div>
-          <div><b>Remaining:</b> <span id="sumRemain">0 L</span></div>
-        </div>
-
-        <div class="btn-row">
-          <button id="btnCreateBatch" class="btn primary">🧪 Create Batch</button>
-          <button id="btnDeleteDraft" class="btn danger">🗑️ Delete Batch</button>
+        <div class="row gap end">
+          <button id="batSearchBtn" type="button" class="btn">🔎 Search</button>
+          <button id="batResetBtn"  type="button" class="btn">♻️ Reset</button>
+          <button id="newBatch"     type="button" class="btn primary">➕ New Batch</button>
         </div>
       </div>
+    </details>
 
-      <h3 class="mt">Existing Batches</h3>
-      <div class="card soft">
-        <details open>
-          <summary>Filters</summary>
-          <div class="row two">
-            <div class="col"><label class="lbl">From (Date)</label><input id="batFrom" class="input" type="date"/></div>
-            <div class="col"><label class="lbl">To (Date)</label><input id="batTo" class="input" type="date"/></div>
+    <section id="batchList" class="list"></section>
+  </main>
+
+  <!-- ================== INVENTORY ================== -->
+  <main id="inventory" class="screen">
+    <h2>Chemical Inventory</h2>
+
+    <div class="row gap">
+      <a class="btn pill" href="https://www.pilot.net.au/sds" target="_blank" rel="noopener">📑 SDS Portal</a>
+      <button id="addChem" class="btn pill">➕ Add Chemical</button>
+    </div>
+
+    <section id="chemList" class="list" style="margin-top:.6rem;"></section>
+
+    <!-- Full-screen editor sheet -->
+    <section id="chemEditSheet" class="sheet" style="display:none;">
+      <div class="sheet-body">
+        <h3>Edit Chemical</h3>
+        <div class="field"><label>Name</label><input id="ce_name"/></div>
+        <div class="field"><label>Active Ingredient</label><input id="ce_active"/></div>
+        <div class="field-row">
+          <div class="field"><label>Container Size</label><input id="ce_size" inputmode="decimal"/></div>
+          <div class="field"><label>Unit</label>
+            <select id="ce_unit">
+              <option>L</option><option>mL</option><option>g</option><option>kg</option>
+            </select>
           </div>
-          <div class="btn-row-right">
-            <button id="btnBatSearch" class="btn primary">🔍 Search</button>
-            <button id="btnBatReset" class="btn danger">♻️ Reset</button>
-          </div>
-        </details>
+          <div class="field"><label>Containers</label><input id="ce_count" inputmode="numeric"/></div>
+        </div>
+        <div class="field"><label>Reorder Threshold (containers)</label><input id="ce_threshold" inputmode="numeric"/></div>
+        <div class="row gap end">
+          <button id="ce_cancel" class="btn">Cancel</button>
+          <button id="ce_save"   class="btn primary">Save</button>
+        </div>
       </div>
-
-      <div id="batchList" class="stack"></div>
     </section>
   </main>
 
-  <!-- PROCUREMENT (placeholder simple list) -->
-  <main id="procurement" class="screen">
-    <section class="page">
-      <h2>Procurement List</h2>
-      <div id="procList" class="stack"></div>
-    </section>
+  <!-- ================== PROCUREMENT ================== -->
+  <main id="procure" class="screen">
+    <h2>Procurement List</h2>
+    <ul id="procList" class="proc-list"></ul>
   </main>
 
-  <!-- MAPPING -->
+  <!-- ================== MAPPING ================== -->
   <main id="mapping" class="screen">
-    <section class="page">
-      <h2>Mapping</h2>
-      <div class="card soft">
-        <details open>
-          <summary>Filters</summary>
-          <div class="row three">
-            <div class="col"><label class="lbl">From</label><input id="mapFrom" class="input" type="date"/></div>
-            <div class="col"><label class="lbl">To</label><input id="mapTo" class="input" type="date"/></div>
-            <div class="col"><label class="lbl">Type</label>
-              <select id="mapType" class="input">
-                <option value="All">All</option>
-                <option>Inspection</option>
-                <option>Road Spray</option>
-                <option>Spot Spray</option>
-                <option>Slash</option>
-              </select>
-            </div>
-          </div>
-          <input id="mapSearch" class="input" placeholder="Weed name…"/>
-          <div class="btn-row-right">
-            <button id="btnMapSearch" class="btn primary">🔍 Search</button>
-            <button id="btnMapReset" class="btn danger">♻️ Reset</button>
-          </div>
-        </details>
-      </div>
+    <h2>Mapping</h2>
 
-      <div id="map" class="map"></div>
-      <div class="btn-row-right mt"><button id="btnLocateMe" class="btn">📍 Locate Me</button></div>
-    </section>
+    <details class="filters">
+      <summary>Filters & Search</summary>
+      <div class="filter-grid">
+        <input id="mapWeed" placeholder="Search weed / road / job"/>
+        <div class="row gap">
+          <div class="field compact"><label>From</label><input id="mapFrom" type="date"/></div>
+          <div class="field compact"><label>To</label><input id="mapTo" type="date"/></div>
+          <div class="field compact">
+            <label>Type</label>
+            <select id="mapType">
+              <option>All</option>
+              <option>Inspection</option>
+              <option>Road Spray</option>
+              <option>Spot Spray</option>
+            </select>
+          </div>
+        </div>
+        <div class="row gap end">
+          <button id="mapSearchBtn" type="button" class="btn">🔎 Search</button>
+          <button id="mapResetBtn"  type="button" class="btn">♻️ Reset</button>
+          <button id="locateMapBtn" type="button" class="btn pill">📍 Locate Me</button>
+        </div>
+      </div>
+    </details>
+
+    <div id="map" class="map"></div>
   </main>
 
-  <!-- SETTINGS -->
+  <!-- ================== SETTINGS ================== -->
   <main id="settings" class="screen">
-    <section class="page">
-      <h2>Settings / Data</h2>
-      <div class="card">
-        <div class="row two">
-          <button id="btnExport" class="btn">⬇️ Export JSON</button>
-          <button id="btnImport" class="btn">⬆️ Import JSON</button>
-        </div>
-        <div class="row two">
-          <button id="btnClear" class="btn danger">🧹 Clear Data</button>
-          <button id="btnTheme" class="btn">🌓 Toggle Theme</button>
-        </div>
-        <input id="fileImport" type="file" accept="application/json" hidden/>
+    <h2>Settings</h2>
+
+    <div class="card p">
+      <div class="field">
+        <label for="accountEmail">Account email (optional — for future sync)</label>
+        <input id="accountEmail" placeholder="name@example.com"/>
+      </div>
+      <div class="row gap">
+        <button id="saveAccount" class="btn">Save</button>
+      </div>
+    </div>
+
+    <section class="card p">
+      <h3>Data</h3>
+      <div class="row gap">
+        <button id="exportBtn"  class="btn">⬇️ Export Data</button>
+        <button id="restoreBtn" class="btn">↩️ Restore Last Backup</button>
+        <button id="clearBtn"   class="btn warn">🗑 Clear All Data</button>
       </div>
     </section>
   </main>
 
-  <!-- Popup host -->
-  <div id="popupHost"></div>
+  <!-- ================== SCRIPTS (ORDER MATTERS) ================== -->
+  <script src="storage.js" defer></script>
+  <script src="extras.js"  defer></script>
+  <script src="batches.js" defer></script>
+  <script src="apps.js"    defer></script>
 </body>
 </html>
