@@ -1,184 +1,235 @@
-// ===============================
-// WeedTracker V60 Pilot Final
-// BATCHES.JS
-// ===============================
+/* =========================================================
+   WeedTracker V60 Pilot - batches.js
+   Batch creation, linking, totals & pop-up view handling
+   ========================================================= */
 
-function openBatchesScreen() {
-  switchScreen("batchesScreen");
-  renderBatches();
+function openBatchCreator() {
+  const sheet = document.getElementById("batchSheet");
+  if (sheet) {
+    sheet.style.display = "flex";
+    renderChemicalRows([]);
+  }
 }
 
-function renderBatches() {
-  const container = $("batchList");
-  const batches = getBatches();
+/* ---------- Add chemical rows dynamically ---------- */
+function renderChemicalRows(rows) {
+  const container = document.getElementById("chemRows");
+  if (!container) return;
   container.innerHTML = "";
-  if (!batches.length) {
-    container.innerHTML = `<p style="text-align:center;opacity:0.6;">No batches created yet 🧪</p>`;
+
+  rows.forEach((row, i) => {
+    container.appendChild(createChemicalRow(i, row));
+  });
+
+  const addBtn = document.createElement("button");
+  addBtn.textContent = "➕ Add Chemical";
+  addBtn.className = "pill emph";
+  addBtn.onclick = () => {
+    rows.push({ name: "", rate: "", unit: "" });
+    renderChemicalRows(rows);
+  };
+  container.appendChild(addBtn);
+}
+
+function createChemicalRow(i, data) {
+  const row = document.createElement("div");
+  row.className = "row gap";
+  row.innerHTML = `
+    <div class="col"><label>Chemical</label>
+      <select id="chem_name_${i}">
+        ${loadChemicals()
+          .map(
+            (c) =>
+              `<option value="${c.name}" ${
+                c.name === data.name ? "selected" : ""
+              }>${c.name}</option>`
+          )
+          .join("")}
+      </select>
+    </div>
+    <div class="col"><label>Amount /100L</label>
+      <input id="chem_rate_${i}" type="number" step="0.01" value="${
+    data.rate || ""
+  }">
+    </div>
+    <div class="col"><label>Unit</label>
+      <select id="chem_unit_${i}">
+        ${["L", "mL", "g", "kg"]
+          .map(
+            (u) =>
+              `<option value="${u}" ${
+                u === data.unit ? "selected" : ""
+              }>${u}</option>`
+          )
+          .join("")}
+      </select>
+    </div>
+    <div class="col end">
+      <button class="pill warn" onclick="removeChemical(${i})">🗑️</button>
+    </div>`;
+  return row;
+}
+
+/* ---------- Remove chemical ---------- */
+function removeChemical(i) {
+  const rows = getChemicalInputs();
+  rows.splice(i, 1);
+  renderChemicalRows(rows);
+}
+
+/* ---------- Collect data ---------- */
+function getChemicalInputs() {
+  const rows = [];
+  const container = document.getElementById("chemRows");
+  if (!container) return rows;
+  const selects = container.querySelectorAll("select[id^='chem_name_']");
+  selects.forEach((sel, i) => {
+    const rate = document.getElementById(`chem_rate_${i}`)?.value || "";
+    const unit = document.getElementById(`chem_unit_${i}`)?.value || "";
+    rows.push({ name: sel.value, rate, unit });
+  });
+  return rows;
+}
+
+/* ---------- Create batch ---------- */
+function createBatch() {
+  WTStorage.showSpinner(true, "Creating batch…");
+
+  const batchName = document.getElementById("batchName").value.trim();
+  const date = WTStorage.todayDate();
+  const time = WTStorage.nowTime();
+  const totalMix = Number(document.getElementById("totalMix").value) || 0;
+  const chemicals = getChemicalInputs();
+  const batches = WTStorage.loadData("batches", []);
+
+  // Validate
+  if (!batchName || totalMix <= 0 || chemicals.length === 0) {
+    WTStorage.showSpinner(false);
+    WTStorage.showToast("⚠️ Please fill all fields");
     return;
   }
 
-  batches.forEach(b => {
+  // Build totals and remaining
+  const batch = {
+    id: WTStorage.generateId("BATCH"),
+    batchName,
+    date,
+    time,
+    totalMix,
+    remaining: totalMix,
+    chemicals,
+    linkedJobs: [],
+  };
+
+  batches.push(batch);
+  WTStorage.saveData("batches", batches);
+
+  WTStorage.showSpinner(false);
+  WTStorage.showToast("✅ Batch Created");
+  closeSheet("batchSheet");
+  renderBatchList();
+}
+
+/* ---------- Render Batches ---------- */
+function renderBatchList() {
+  const list = document.getElementById("batchList");
+  if (!list) return;
+  list.innerHTML = "";
+  const batches = WTStorage.loadData("batches", []);
+  if (batches.length === 0) {
+    list.innerHTML = `<p class='muted'>No batches recorded</p>`;
+    return;
+  }
+
+  batches.forEach((b) => {
     const div = document.createElement("div");
-    div.className = "list-item";
-    const remaining = b.totalMix - (b.usedMix || 0) - (b.dumpedMix || 0);
-    let status = "🟢";
-    if (remaining <= 0) status = "🔴";
-    else if (remaining < b.totalMix / 2) status = "🟡";
+    div.className = "card";
     div.innerHTML = `
-      <div>
-        <strong>${b.name}</strong><br>
-        <small>${b.date} • ${b.time}</small><br>
-        <small>Total: ${b.totalMix} L | Remaining: ${remaining} L</small>
-      </div>
-      <div class="row gap">
-        <button class="pill" onclick="openBatchDetails('${b.id}')">Open</button>
+      <b>${b.batchName}</b><br>
+      <span>${b.date} ${b.time}</span><br>
+      <span>Total: ${b.totalMix}L • Remaining: ${b.remaining}L</span><br>
+      <div class="row end gap">
+        <button class="pill" onclick="openBatch('${b.id}')">Open</button>
         <button class="pill warn" onclick="deleteBatch('${b.id}')">Delete</button>
       </div>`;
-    container.appendChild(div);
+    list.appendChild(div);
   });
 }
 
-function newBatchPopup() {
+/* ---------- Open Batch Popup ---------- */
+function openBatch(id) {
+  const batches = WTStorage.loadData("batches", []);
+  const b = batches.find((x) => x.id === id);
+  if (!b) return;
+
   const popup = document.createElement("div");
-  popup.className = "card soft";
-  popup.id = "batchPopup";
-  popup.style.position = "fixed";
-  popup.style.top = "5%";
-  popup.style.left = "50%";
-  popup.style.transform = "translateX(-50%)";
-  popup.style.width = "90%";
-  popup.style.maxHeight = "85vh";
-  popup.style.overflowY = "auto";
-  popup.style.zIndex = "200";
+  popup.className = "sheet";
   popup.innerHTML = `
-    <h3>Create New Batch 🧪</h3>
-    <label>Date: <input type="date" id="batchDate"></label>
-    <label>Time: <input type="time" id="batchTime"></label>
-    <label>Total Mix (L): <input type="number" id="batchTotal" placeholder="e.g. 800"></label>
-    <div id="batchChemList"></div>
-    <button class="btn secondary" onclick="addChemicalRow()">+ Add Chemical</button>
-    <div class="row end gap" style="margin-top:1rem;">
-      <button class="btn danger" onclick="cancelBatch()">Delete</button>
-      <button class="btn primary" onclick="saveBatch()">Create Batch</button>
-    </div>
-  `;
-  popup.prepend(addPopupClose("batchPopup"));
-  document.body.appendChild(popup);
-  addChemicalRow(); // first row
-}
-
-function addChemicalRow() {
-  const div = document.createElement("div");
-  div.className = "card soft";
-  div.style.marginTop = "0.5rem";
-  const chems = getChemicals();
-  const opts = chems.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
-  div.innerHTML = `
-    <label>Chemical:
-      <select class="chemName">${opts}</select>
-    </label>
-    <div class="row gap">
-      <label class="grow">Per 100 L:
-        <input type="number" class="chemRate" placeholder="e.g. 2">
-      </label>
-      <label class="grow">Unit:
-        <select class="chemUnit">
-          <option value="L">L</option>
-          <option value="mL">mL</option>
-          <option value="g">g</option>
-          <option value="kg">kg</option>
-        </select>
-      </label>
-    </div>
-  `;
-  $("batchChemList").appendChild(div);
-}
-
-function cancelBatch() {
-  $("batchPopup").remove();
-  toast("Batch cancelled ❌");
-}
-
-function saveBatch() {
-  const totalMix = parseFloat($("batchTotal").value) || 0;
-  const date = $("batchDate").value || new Date().toISOString().split("T")[0];
-  const time = $("batchTime").value || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (!totalMix) { toast("Enter total mix ❗"); return; }
-
-  const chemicals = [];
-  let valid = true;
-  document.querySelectorAll("#batchChemList .card").forEach(c => {
-    const name = c.querySelector(".chemName").value;
-    const rate = parseFloat(c.querySelector(".chemRate").value) || 0;
-    const unit = c.querySelector(".chemUnit").value;
-    const totalUsed = (totalMix / 100) * rate;
-    if (!checkInventory(name, totalUsed)) valid = false;
-    chemicals.push({ name, rate, unit, totalUsed });
-  });
-  if (!valid) return;
-
-  const id = `B${Date.now()}`;
-  const name = `Batch_${date}_${time.replace(/:/g, "")}`;
-  const batch = { id, name, date, time, totalMix, chemicals, usedMix: 0, dumpedMix: 0 };
-
-  const batches = getBatches();
-  batches.push(batch);
-  setBatches(batches);
-
-  spinnerDone("Batch created ✅");
-  $("batchPopup").remove();
-  renderBatches();
-}
-
-function openBatchDetails(id) {
-  const batch = getBatches().find(b => b.id === id);
-  if (!batch) return toast("Batch not found");
-  const popup = document.createElement("div");
-  popup.className = "card soft";
-  popup.id = "batchDetailPopup";
-  popup.style.position = "fixed";
-  popup.style.top = "5%";
-  popup.style.left = "50%";
-  popup.style.transform = "translateX(-50%)";
-  popup.style.width = "90%";
-  popup.style.maxHeight = "85vh";
-  popup.style.overflowY = "auto";
-  popup.style.zIndex = "200";
-
-  const chemList = batch.chemicals.map(c => `
-    <li>${c.name} – ${c.rate}${c.unit}/100 L → ${c.totalUsed}${c.unit} total</li>`).join("");
-
-  popup.innerHTML = `
-    <h3>${batch.name}</h3>
-    <p><strong>Date:</strong> ${batch.date} ${batch.time}</p>
-    <p><strong>Total Mix:</strong> ${batch.totalMix} L</p>
-    <ul>${chemList}</ul>
-    <p><strong>Used:</strong> ${batch.usedMix} L • <strong>Dumped:</strong> ${batch.dumpedMix} L</p>
-    <div class="row gap end" style="margin-top:1rem;">
-      <button class="btn secondary" onclick="dumpBatch('${batch.id}')">Dump</button>
-      <button class="btn danger" onclick="deleteBatch('${batch.id}')">Delete</button>
-    </div>
-  `;
-  popup.prepend(addPopupClose("batchDetailPopup"));
+    <div class="sheet-content">
+      <button class="pill warn end" onclick="this.closest('.sheet').remove()">✖ Close</button>
+      <h3>${b.batchName}</h3>
+      <p><b>Date:</b> ${b.date} ${b.time}</p>
+      <p><b>Total:</b> ${b.totalMix}L</p>
+      <p><b>Remaining:</b> ${b.remaining}L</p>
+      <h4>Chemicals</h4>
+      ${b.chemicals
+        .map(
+          (c) =>
+            `<div>${c.name} — ${c.rate}${c.unit}/100L</div>`
+        )
+        .join("")}
+      <h4>Linked Jobs</h4>
+      ${
+        b.linkedJobs.length
+          ? b.linkedJobs.map((j) => `<div>${j}</div>`).join("")
+          : "<p class='muted'>None</p>"
+      }
+      <div class="row gap end">
+        <button class="pill warn" onclick="dumpBatch('${id}')">Dump</button>
+      </div>
+    </div>`;
   document.body.appendChild(popup);
 }
 
+/* ---------- Dump Batch ---------- */
 function dumpBatch(id) {
-  const batch = getBatches().find(b => b.id === id);
-  if (!batch) return;
-  const dumpAmount = prompt("Enter amount to dump (L):", "0");
-  const reason = prompt("Reason for dumping:", "Not required");
-  if (!dumpAmount) return;
-  batch.dumpedMix = (batch.dumpedMix || 0) + parseFloat(dumpAmount);
-  setBatches(getBatches().map(b => (b.id === id ? batch : b)));
-  toast(`Dumped ${dumpAmount} L (${reason})`);
-  renderBatches();
+  const batches = WTStorage.loadData("batches", []);
+  const b = batches.find((x) => x.id === id);
+  if (!b) return;
+  const reason = prompt("Reason for dumping batch?");
+  if (!reason) return;
+  b.remaining = 0;
+  b.dumpedReason = reason;
+  WTStorage.saveData("batches", batches);
+  WTStorage.showToast("🚮 Batch dumped");
+  document.querySelector(".sheet")?.remove();
+  renderBatchList();
 }
 
+/* ---------- Delete Batch ---------- */
 function deleteBatch(id) {
-  if (!confirm("Delete this batch permanently?")) return;
-  const list = getBatches().filter(b => b.id !== id);
-  setBatches(list);
-  renderBatches();
-  toast("Batch deleted 🗑️");
+  if (!confirm("Delete this batch?")) return;
+  let batches = WTStorage.loadData("batches", []);
+  batches = batches.filter((b) => b.id !== id);
+  WTStorage.saveData("batches", batches);
+  WTStorage.showToast("🗑️ Batch deleted");
+  renderBatchList();
 }
+
+/* ---------- Load chemicals for dropdown ---------- */
+function loadChemicals() {
+  return WTStorage.loadData("chemicals", []);
+}
+
+/* ---------- Init ---------- */
+window.addEventListener("DOMContentLoaded", renderBatchList);
+
+/* ---------- Export ---------- */
+window.WTBatches = {
+  openBatchCreator,
+  createBatch,
+  renderBatchList,
+  openBatch,
+  dumpBatch,
+  deleteBatch,
+};
