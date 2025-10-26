@@ -1,44 +1,64 @@
-// ===============================
-// WeedTracker V60 Pilot Final
-// SETTINGS.JS
-// ===============================
+/* =========================================================
+   WeedTracker V60 Pilot — settings.js
+   Handles: Clear Data, Export, Theme toggle
+   ========================================================= */
 
-function openSettings() {
-  switchScreen("settingsScreen");
-  renderSettings();
-}
+(function () {
+  const spin = (s,t) => WTStorage.showSpinner(s,t);
+  const toast = (m) => WTStorage.showToast(m);
 
-function renderSettings() {
-  const s = getSettings();
-  $("settingsHost").innerHTML = `
-    <div class="card soft">
-      <h3>Settings ⚙️</h3>
-      <label><input type="checkbox" id="darkMode" ${s.darkMode ? "checked" : ""}> Dark Mode</label>
-      <label><input type="checkbox" id="remindersOn" ${s.notifyReminders ? "checked" : ""}> Reminders On</label>
-      <div class="row gap" style="margin-top:1rem;">
-        <button class="btn primary" onclick="saveSettings()">Save</button>
-        <button class="btn danger" onclick="clearAll()">Clear Data</button>
-        <button class="btn secondary" onclick="exportAll()">Export Data</button>
-      </div>
-    </div>
-    <div class="card soft">
-      <h4>About WeedTracker V60 Pilot</h4>
-      <p>Developed for field operations — tracks weeds, batches, and spray records with GPS and reminders.</p>
-    </div>
-  `;
-}
+  // ---------- Clear Data ----------
+  async function clearAllData() {
+    if (!confirm("⚠️ This will delete ALL records, batches, and settings.\nContinue?")) return;
+    spin(true,"Clearing data…");
+    localStorage.clear();
+    setTimeout(()=>{
+      spin(false);
+      toast("🧹 All data cleared");
+      setTimeout(()=>location.reload(),800);
+    },600);
+  }
 
-function saveSettings() {
-  const s = {
-    darkMode: $("darkMode").checked,
-    notifyReminders: $("remindersOn").checked
-  };
-  setSettings(s);
-  applyTheme();
-  toast("Settings saved ✅");
-}
+  // ---------- Export ----------
+  function exportAll() {
+    spin(true,"Exporting data…");
+    const dump = {
+      records: WTStorage.loadData("records", []),
+      batches: WTStorage.loadData("batches", []),
+      chemicals: WTStorage.loadData("chemicals", []),
+      created: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(dump,null,2)],{type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `WeedTrackerExport_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    spin(false);
+    toast("📦 Export complete");
+  }
 
-function applyTheme() {
-  const s = getSettings();
-  document.body.classList.toggle("dark", s.darkMode);
-}
+  // ---------- Theme Toggle ----------
+  function toggleTheme() {
+    const root = document.documentElement;
+    const current = root.dataset.theme || "dark";
+    const next = current==="dark" ? "light" : "dark";
+    root.dataset.theme = next;
+    toast(`🎨 Theme: ${next}`);
+  }
+
+  // ---------- Init ----------
+  function initSettings() {
+    const btnClear = document.getElementById("clearDataBtn");
+    const btnExport = document.getElementById("exportDataBtn");
+    const btnTheme = document.getElementById("toggleThemeBtn");
+    if (btnClear)  btnClear.onclick  = clearAllData;
+    if (btnExport) btnExport.onclick = exportAll;
+    if (btnTheme)  btnTheme.onclick  = toggleTheme;
+  }
+
+  window.addEventListener("DOMContentLoaded", initSettings);
+
+  window.WTSettings = { clearAllData, exportAll, toggleTheme };
+})();
