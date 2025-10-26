@@ -1,82 +1,142 @@
-// ===============================
-// WeedTracker V60 Pilot Final
-// STORAGE.JS
-// ===============================
+/* =========================================================
+   WeedTracker V60 Pilot - storage.js
+   Handles localStorage read/write and simple JSON backups
+   ========================================================= */
 
-const STORAGE_KEYS = {
-  JOBS: "wt_jobs",
-  DRAFTS: "wt_drafts",
-  CHEMS: "wt_chems",
-  BATCHES: "wt_batches",
-  SETTINGS: "wt_settings"
-};
+const WT_PREFIX = "weedtracker_v60_";
 
-// Generic save/load wrappers
-function saveData(key, data) {
-  localStorage.setItem(key, JSON.stringify(data));
-}
-function loadData(key, fallback = []) {
+/* ---------- Core save/load wrappers ---------- */
+function saveData(key, value) {
   try {
-    const d = JSON.parse(localStorage.getItem(key));
-    return Array.isArray(d) || typeof d === "object" ? d : fallback;
-  } catch {
-    return fallback;
+    localStorage.setItem(WT_PREFIX + key, JSON.stringify(value));
+  } catch (e) {
+    console.error("Save error:", e);
+    showToast("⚠️ Save failed");
   }
 }
 
-// JOBS
-function getJobs() { return loadData(STORAGE_KEYS.JOBS); }
-function setJobs(data) { saveData(STORAGE_KEYS.JOBS, data); }
-
-// DRAFTS
-function getDrafts() { return loadData(STORAGE_KEYS.DRAFTS); }
-function setDrafts(data) { saveData(STORAGE_KEYS.DRAFTS, data); }
-
-// CHEMICALS
-function getChemicals() { return loadData(STORAGE_KEYS.CHEMS); }
-function setChemicals(data) { saveData(STORAGE_KEYS.CHEMS, data); }
-
-// BATCHES
-function getBatches() { return loadData(STORAGE_KEYS.BATCHES); }
-function setBatches(data) { saveData(STORAGE_KEYS.BATCHES, data); }
-
-// SETTINGS
-function getSettings() { return loadData(STORAGE_KEYS.SETTINGS, {
-  darkMode: true,
-  notifyReminders: true
-}); }
-function setSettings(d) { saveData(STORAGE_KEYS.SETTINGS, d); }
-
-// UTILITIES
-function clearAll() {
-  Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
-  toast("All data cleared 🧹");
+function loadData(key, def = null) {
+  try {
+    const val = localStorage.getItem(WT_PREFIX + key);
+    return val ? JSON.parse(val) : def;
+  } catch (e) {
+    console.error("Load error:", e);
+    return def;
+  }
 }
 
-function exportAll() {
-  const data = {};
-  for (const k of Object.keys(STORAGE_KEYS)) data[k] = loadData(k);
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+/* ---------- Backup / restore ---------- */
+function exportAllData() {
+  const exportObj = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith(WT_PREFIX)) {
+      exportObj[key] = localStorage.getItem(key);
+    }
+  }
+
+  const blob = new Blob([JSON.stringify(exportObj, null, 2)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "weedtracker_backup.json";
-  document.body.appendChild(a);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  a.download = `weedtracker_backup_${stamp}.json`;
   a.click();
-  document.body.removeChild(a);
-  toast("Export ready ⬇️");
+  showToast("💾 Backup exported");
 }
 
-// Reminder utility
-function checkReminders() {
-  const jobs = getJobs();
-  const now = new Date();
-  jobs.forEach(j => {
-    if (j.reminderDate && new Date(j.reminderDate) <= now && !j.reminderShown) {
-      j.reminderShown = true;
-      toast(`🔔 Reminder due: ${j.jobName}`);
+function importBackup(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      Object.entries(data).forEach(([k, v]) => {
+        localStorage.setItem(k, v);
+      });
+      showToast("♻️ Backup restored");
+      setTimeout(() => location.reload(), 1000);
+    } catch (err) {
+      console.error("Import failed:", err);
+      showToast("❌ Restore failed");
     }
-  });
-  setJobs(jobs);
+  };
+  reader.readAsText(file);
 }
-setInterval(checkReminders, 1000 * 60 * 60); // hourly
+
+/* ---------- Clear All ---------- */
+function clearAllData() {
+  if (confirm("Clear all WeedTracker data?")) {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(WT_PREFIX))
+      .forEach((k) => localStorage.removeItem(k));
+    showToast("🗑️ Data cleared");
+    setTimeout(() => location.reload(), 800);
+  }
+}
+
+/* ---------- Generic Toast ---------- */
+function showToast(msg, duration = 2000) {
+  const el = document.getElementById("toast");
+  if (!el) return alert(msg);
+  el.textContent = msg;
+  el.style.display = "block";
+  setTimeout(() => {
+    el.style.display = "none";
+  }, duration);
+}
+
+/* ---------- Spinner Overlay ---------- */
+function showSpinner(show = true, text = "Working…") {
+  const el = document.getElementById("spinner");
+  if (!el) return;
+  el.style.display = show ? "flex" : "none";
+  if (show) {
+    el.querySelector("span").textContent = text;
+  }
+}
+
+/* ---------- Date Utilities ---------- */
+function todayDate() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function nowTime() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 5);
+}
+
+/* ---------- ID Generator ---------- */
+function generateId(prefix = "WT") {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${(now.getMonth()+1)
+    .toString().padStart(2,"0")}${now.getDate()
+    .toString().padStart(2,"0")}${now.getHours()
+    .toString().padStart(2,"0")}${now.getMinutes()
+    .toString().padStart(2,"0")}`;
+  return `${prefix}-${stamp}`;
+}
+
+/* ---------- Defaults ---------- */
+function initDefaults() {
+  if (!loadData("chemicals")) saveData("chemicals", []);
+  if (!loadData("batches")) saveData("batches", []);
+  if (!loadData("records")) saveData("records", []);
+}
+
+/* ---------- Export API ---------- */
+window.WTStorage = {
+  saveData,
+  loadData,
+  exportAllData,
+  importBackup,
+  clearAllData,
+  showToast,
+  showSpinner,
+  todayDate,
+  nowTime,
+  generateId,
+  initDefaults
+};
