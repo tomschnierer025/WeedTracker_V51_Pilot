@@ -1,64 +1,67 @@
-/* =========================================================
-   WeedTracker V60 Pilot — settings.js
-   Handles: Clear Data, Export, Theme toggle
-   ========================================================= */
+/* === WeedTracker V60 Pilot — settings.js ===
+ * Handles: user preferences, account info, data export/restore, dark mode, etc.
+ * Fully integrated with storage.js helpers.
+ */
 
-(function () {
-  const spin = (s,t) => WTStorage.showSpinner(s,t);
-  const toast = (m) => WTStorage.showToast(m);
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem("weedtracker_settings") || "{}"); }
+  catch { return {}; }
+}
+function saveSettings(obj) {
+  localStorage.setItem("weedtracker_settings", JSON.stringify(obj || {}));
+}
 
-  // ---------- Clear Data ----------
-  async function clearAllData() {
-    if (!confirm("⚠️ This will delete ALL records, batches, and settings.\nContinue?")) return;
-    spin(true,"Clearing data…");
-    localStorage.clear();
-    setTimeout(()=>{
-      spin(false);
-      toast("🧹 All data cleared");
-      setTimeout(()=>location.reload(),800);
-    },600);
+function toggleDarkMode(enable) {
+  document.body.classList.toggle("dark", enable);
+  const s = loadSettings();
+  s.darkMode = enable;
+  saveSettings(s);
+}
+
+// Restore saved theme on load
+document.addEventListener("DOMContentLoaded", () => {
+  const s = loadSettings();
+  if (s.darkMode) document.body.classList.add("dark");
+  const chk = document.getElementById("darkModeToggle");
+  if (chk) {
+    chk.checked = !!s.darkMode;
+    chk.onchange = e => toggleDarkMode(e.target.checked);
   }
+});
 
-  // ---------- Export ----------
-  function exportAll() {
-    spin(true,"Exporting data…");
-    const dump = {
-      records: WTStorage.loadData("records", []),
-      batches: WTStorage.loadData("batches", []),
-      chemicals: WTStorage.loadData("chemicals", []),
-      created: new Date().toISOString()
+// Export & Restore JSON backup (hooked from settings screen)
+function restoreBackup() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+  input.onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.jobs) saveJobs(data.jobs);
+        if (data.batches) saveBatches(data.batches);
+        if (data.chemicals) saveChemicals(data.chemicals);
+        if (data.settings) saveSettings(data.settings);
+        showToast("Backup restored");
+      } catch(err) {
+        alert("Invalid file");
+      }
     };
-    const blob = new Blob([JSON.stringify(dump,null,2)],{type:"application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `WeedTrackerExport_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    spin(false);
-    toast("📦 Export complete");
+    reader.readAsText(f);
+  };
+  input.click();
+}
+
+// Clear All Storage (with confirmation)
+const Storage = {
+  clearAll() {
+    if (!confirm("Clear all data?")) return;
+    localStorage.clear();
+    showToast("All data cleared");
+    setTimeout(()=>location.reload(),1000);
   }
+};
 
-  // ---------- Theme Toggle ----------
-  function toggleTheme() {
-    const root = document.documentElement;
-    const current = root.dataset.theme || "dark";
-    const next = current==="dark" ? "light" : "dark";
-    root.dataset.theme = next;
-    toast(`🎨 Theme: ${next}`);
-  }
-
-  // ---------- Init ----------
-  function initSettings() {
-    const btnClear = document.getElementById("clearDataBtn");
-    const btnExport = document.getElementById("exportDataBtn");
-    const btnTheme = document.getElementById("toggleThemeBtn");
-    if (btnClear)  btnClear.onclick  = clearAllData;
-    if (btnExport) btnExport.onclick = exportAll;
-    if (btnTheme)  btnTheme.onclick  = toggleTheme;
-  }
-
-  window.addEventListener("DOMContentLoaded", initSettings);
-
-  window.WTSettings = { clearAllData, exportAll, toggleTheme };
-})();
+console.log("✅ settings.js loaded");
