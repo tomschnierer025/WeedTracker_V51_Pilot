@@ -1,136 +1,167 @@
-// storage.js — WeedTracker V60 Pilot
-// Handles saving and loading of Jobs, Batches, and Chemicals using localStorage
+/* WeedTracker V60 Pilot — storage.js */
+/* LocalStorage handling for tasks, batches, chemicals, weeds, and exports */
 
-const Storage = {
-  save(key, data) {
-    try {
-      localStorage.setItem(key, JSON.stringify(data));
-    } catch (err) {
-      console.error("Save error:", key, err);
-    }
-  },
+const DB_KEY = "weedtracker_data_v60";
 
-  load(key, fallback = []) {
-    try {
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : fallback;
-    } catch (err) {
-      console.error("Load error:", key, err);
-      return fallback;
-    }
-  },
-
-  remove(key) {
-    try {
-      localStorage.removeItem(key);
-    } catch (err) {
-      console.error("Remove error:", key, err);
-    }
-  },
-
-  clearAll() {
-    if (confirm("Are you sure you want to clear ALL data?")) {
-      localStorage.clear();
-      alert("All data cleared.");
-      location.reload();
-    }
+/* ---------- Load & Save ---------- */
+function loadDB() {
+  try {
+    const data = JSON.parse(localStorage.getItem(DB_KEY) || "{}");
+    data.tasks ??= [];
+    data.batches ??= [];
+    data.chems ??= [];
+    data.weeds ??= [];
+    data.version = 60;
+    return data;
+  } catch {
+    return { tasks: [], batches: [], chems: [], weeds: [], version: 60 };
   }
-};
-
-// KEYS
-const JOBS_KEY = "weedtracker_jobs";
-const BATCHES_KEY = "weedtracker_batches";
-const CHEMS_KEY = "weedtracker_chemicals";
-const SETTINGS_KEY = "weedtracker_settings";
-const DRAFTS_KEY = "weedtracker_drafts";
-
-// JOBS
-function loadJobs() {
-  return Storage.load(JOBS_KEY, []);
-}
-function saveJobs(jobs) {
-  Storage.save(JOBS_KEY, jobs);
 }
 
-// DRAFTS
-function loadDrafts() {
-  return Storage.load(DRAFTS_KEY, []);
-}
-function saveDrafts(drafts) {
-  Storage.save(DRAFTS_KEY, drafts);
+function saveDB(db) {
+  localStorage.setItem(DB_KEY, JSON.stringify(db || {}));
 }
 
-// BATCHES
-function loadBatches() {
-  return Storage.load(BATCHES_KEY, []);
-}
-function saveBatches(batches) {
-  Storage.save(BATCHES_KEY, batches);
+/* ---------- Helpers ---------- */
+function todayISO() {
+  return new Date().toISOString().split("T")[0];
 }
 
-// CHEMICALS
-function loadChemicals() {
-  return Storage.load(CHEMS_KEY, []);
-}
-function saveChemicals(chems) {
-  Storage.save(CHEMS_KEY, chems);
+function nowTime() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-// SETTINGS
-function loadSettings() {
-  return Storage.load(SETTINGS_KEY, {});
-}
-function saveSettings(obj) {
-  Storage.save(SETTINGS_KEY, obj);
+/* ---------- Task Handling ---------- */
+function getTasks() {
+  const db = loadDB();
+  return db.tasks || [];
 }
 
-// UTILITIES
-function generateId(prefix) {
-  const id = prefix + "_" + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-  return id.toUpperCase();
+function addOrUpdateTask(task) {
+  const db = loadDB();
+  const idx = db.tasks.findIndex(t => t.id === task.id);
+  if (idx >= 0) db.tasks[idx] = task;
+  else db.tasks.push(task);
+  saveDB(db);
 }
 
-function backupAllData() {
-  const backup = {
-    jobs: loadJobs(),
-    batches: loadBatches(),
-    chemicals: loadChemicals(),
-    drafts: loadDrafts(),
-    settings: loadSettings(),
-    timestamp: new Date().toISOString()
+function deleteTask(id) {
+  const db = loadDB();
+  db.tasks = db.tasks.filter(t => t.id !== id);
+  saveDB(db);
+}
+
+function clearTasks() {
+  const db = loadDB();
+  db.tasks = [];
+  saveDB(db);
+}
+
+/* ---------- Batch Handling ---------- */
+function getBatches() {
+  return loadDB().batches || [];
+}
+
+function addBatch(batch) {
+  const db = loadDB();
+  db.batches.push(batch);
+  saveDB(db);
+}
+
+function updateBatch(id, data) {
+  const db = loadDB();
+  const b = db.batches.find(x => x.id === id);
+  if (b) Object.assign(b, data);
+  saveDB(db);
+}
+
+function deleteBatch(id) {
+  const db = loadDB();
+  db.batches = db.batches.filter(b => b.id !== id);
+  saveDB(db);
+}
+
+/* ---------- Chemical Handling ---------- */
+function getChemicals() {
+  return loadDB().chems || [];
+}
+
+function addChemical(name, ingredient) {
+  const db = loadDB();
+  db.chems.push({ name, ingredient });
+  saveDB(db);
+}
+
+function clearChemicals() {
+  const db = loadDB();
+  db.chems = [];
+  saveDB(db);
+}
+
+/* ---------- Weed Handling ---------- */
+function getWeeds() {
+  const db = loadDB();
+  if (!Array.isArray(db.weeds) || db.weeds.length < 5) {
+    db.weeds = [
+      "Noxious Weeds (category)",
+      "African Lovegrass (noxious)",
+      "Blackberry (noxious)",
+      "Serrated Tussock (noxious)",
+      "Cape Broom (noxious)",
+      "Chilean Needle Grass (noxious)",
+      "St John’s Wort (noxious)",
+      "Sweet Briar (noxious)",
+      "Gorse (noxious)",
+      "Lantana (noxious)",
+      "Fleabane",
+      "Horehound",
+      "Saffron Thistle",
+      "Wild Radish",
+      "Fountain Grass"
+    ];
+    saveDB(db);
+  }
+  return db.weeds;
+}
+
+/* ---------- Export / Import ---------- */
+function exportData() {
+  const data = loadDB();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "WeedTracker_V60_Export.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.tasks && data.batches) {
+        saveDB(data);
+        showToast("Data imported successfully");
+        location.reload();
+      } else {
+        alert("Invalid data file");
+      }
+    } catch {
+      alert("Error reading file");
+    }
   };
-  Storage.save("weedtracker_backup", backup);
-  return backup;
+  reader.readAsText(file);
 }
 
-function restoreBackup() {
-  const b = Storage.load("weedtracker_backup", null);
-  if (!b) {
-    alert("No backup found.");
-    return;
-  }
-  if (!confirm("Restore latest backup? This will overwrite existing data.")) return;
-  Storage.save(JOBS_KEY, b.jobs);
-  Storage.save(BATCHES_KEY, b.batches);
-  Storage.save(CHEMS_KEY, b.chemicals);
-  Storage.save(DRAFTS_KEY, b.drafts);
-  Storage.save(SETTINGS_KEY, b.settings);
-  alert("Backup restored successfully.");
-  location.reload();
+/* ---------- Clear All ---------- */
+function clearAllData() {
+  if (!confirm("Clear all stored data?")) return;
+  localStorage.removeItem(DB_KEY);
+  showToast("All data cleared");
+  setTimeout(() => location.reload(), 1000);
 }
 
-// EXPOSE
-window.Storage = Storage;
-window.loadJobs = loadJobs;
-window.saveJobs = saveJobs;
-window.loadBatches = loadBatches;
-window.saveBatches = saveBatches;
-window.loadChemicals = loadChemicals;
-window.saveChemicals = saveChemicals;
-window.loadSettings = loadSettings;
-window.saveSettings = saveSettings;
-window.generateId = generateId;
-window.backupAllData = backupAllData;
-window.restoreBackup = restoreBackup;
-window.loadDrafts = loadDrafts;
-window.saveDrafts = saveDrafts;
+console.log("✅ storage.js loaded");
