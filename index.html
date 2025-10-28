@@ -1,196 +1,214 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WeedTracker V60 Pilot</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Leaflet (mapping) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+    defer
+  ></script>
+
+  <!-- Core scripts -->
+  <script src="storage.js" defer></script>
+  <script src="batches.js" defer></script>
+  <script src="settings.js" defer></script>
+  <script src="extras.js" defer></script>
+  <script src="apps.js" defer></script>
 </head>
+
 <body>
-
-  <!-- Splash -->
+  <!-- 🌿 Splash Screen -->
   <div id="splash" class="splash">
-    <div class="logo">WeedTracker V60 Pilot</div>
-    <div class="sub">Loading ...</div>
+    <div class="logo">🌿</div>
+    <div class="title">WeedTracker V60 Pilot</div>
+    <div class="loading">Loading…</div>
   </div>
-
-  <!-- Header -->
-  <header class="appbar">
-    <div class="brand">WeedTracker</div>
-    <button id="homeBtn" class="home-btn">🏠</button>
-  </header>
 
   <!-- Home -->
   <div id="home" class="screen active">
-    <div id="homeTopBar">
-      <h2 style="margin:0;padding:10px 0;">WeedTracker V60 Pilot</h2>
-    </div>
-
-    <div class="home-list">
-      <button class="home-btn btn-task" data-target="createTask">🧾 Create Task</button>
-      <button class="home-btn btn-records" data-target="records">📚 Records</button>
-      <button class="home-btn btn-chems" data-target="chemInventory">🧪 Chemical Inventory</button>
-      <button class="home-btn btn-batches" data-target="batches">⚗️ Batches</button>
-      <button class="home-btn btn-proc" data-target="procurement">🛒 Procurement List</button>
-      <button class="home-btn btn-map" data-target="mapping">🗺️ Mapping</button>
-      <button class="home-btn btn-settings" data-target="settings">⚙️ Settings</button>
+    <h1 class="home-title">WeedTracker V60 Pilot</h1>
+    <div class="home-grid">
+      <button id="createTaskBtn" class="home-card btn-task">🧾 Create Task</button>
+      <button id="recordsBtn" class="home-card btn-records">📚 Records</button>
+      <button id="inventoryBtn" class="home-card btn-chems">🧪 Chemical Inventory</button>
+      <button id="batchesBtn" class="home-card btn-batches">⚗️ Batches</button>
+      <button id="procurementBtn" class="home-card btn-proc">🛒 Procurement List</button>
+      <button id="mappingBtn" class="home-card btn-map">🗺️ Mapping</button>
+      <button id="settingsBtn" class="home-card btn-settings">⚙️ Settings</button>
     </div>
   </div>
 
   <!-- Create Task -->
   <div id="createTask" class="screen">
+    <button id="homeBtn" class="pill">🏠 Home</button>
     <h2>Create Task</h2>
 
-    <label>Step 1 – Task Type</label>
-    <select id="taskType">
-      <option>Inspection</option>
-      <option>Spot Spray</option>
-      <option>Road Spray</option>
-    </select>
+    <div class="card form-section">
+      <div class="form-title">1️⃣ Select Task Type</div>
+      <select id="taskType" class="in">
+        <option value="">Select Type</option>
+        <option value="Inspection">Inspection</option>
+        <option value="Spot Spray">Spot Spray</option>
+        <option value="Road Spray">Road Spray</option>
+      </select>
+    </div>
 
-    <div id="roadTrackBlock" style="display:none;margin-top:10px;">
+    <div class="card form-section">
+      <div class="form-title">2️⃣ Get Location</div>
       <button id="locateBtn" class="pill">📍 Get Location</button>
-      <div id="locRoad" class="small"></div>
-      <div class="mt"><button id="startTrack" class="pill">▶ Start Tracking</button>
-      <button id="stopTrack" class="pill">⏹ Stop Tracking</button></div>
-      <div id="trackStatus" class="small mt"></div>
+      <div class="mt small">Road: <b id="locRoad">Unknown</b></div>
     </div>
 
-    <label>Date</label><input type="date" id="jobDate">
-
-    <label>Job Name</label><input id="jobName" placeholder="Auto-generate with road + date">
-    <button id="autoNameBtn" class="pill mt">Auto Generate</button>
-
-    <label>Council Job #</label><input id="councilNum">
-    <label>Linked Inspection ID (optional)</label><input id="linkInspectionId">
-
-    <label>Weed</label><select id="weedSelect"></select>
-    <label>Batch</label><select id="batchSelect"></select>
-
-    <label>Start Time</label><input type="time" id="startTime">
-    <label>End Time</label><input type="time" id="endTime">
-
-    <div class="row spread mt"><b>Weather</b><button id="autoWeatherBtn" class="pill">🌦️ Auto</button></div>
-    <div class="grid two">
-      <input id="temp" placeholder="Temp °C">
-      <input id="humidity" placeholder="Humidity %">
-      <input id="wind" placeholder="Wind km/h">
-      <input id="windDir" placeholder="Wind Direction">
-    </div>
-    <div id="wxUpdated" class="small mt"></div>
-
-    <label>Reminder (weeks)</label><input type="number" id="reminderWeeks" min="0" value="0">
-
-    <div class="form-section">
-      <label>Status</label><br>
-      <label><input type="radio" name="status" value="Incomplete" checked> Incomplete</label>
-      <label><input type="radio" name="status" value="Complete"> Complete</label>
+    <div class="card form-section">
+      <div class="form-title">3️⃣ Auto Job Name</div>
+      <div class="grid two tight">
+        <input id="jobName" class="in" readonly placeholder="RoadDDMMYYYY_I/SS/RS" />
+        <button id="autoNameBtn" class="pill">🪪 Auto Generate</button>
+      </div>
+      <div class="grid two mt-2">
+        <input id="councilNum" class="in" placeholder="Council Job Number (optional)" />
+        <select id="statusSelect" class="in">
+          <option value="Incomplete" selected>Incomplete</option>
+          <option value="Complete">Complete</option>
+          <option value="Draft">Draft</option>
+        </select>
+      </div>
+      <div class="grid two mt-2">
+        <input id="jobDate" type="date" class="in" />
+        <select id="reminderWeeks" class="in">
+          <option value="0">Reminder: None</option>
+        </select>
+      </div>
     </div>
 
-    <label>Notes</label><textarea id="notes" rows="3"></textarea>
+    <div class="card form-section">
+      <div class="form-title">4️⃣ Date & Weather</div>
+      <div class="row gap">
+        <button id="autoWeatherBtn" class="pill">🌦️ Auto Fill Weather</button>
+        <span class="small">Updated: <span id="wxUpdated">—</span></span>
+      </div>
+      <div class="grid two mt">
+        <input id="temp" class="in" placeholder="Temp (°C)" />
+        <input id="humidity" class="in" placeholder="Humidity (%)" />
+        <input id="wind" class="in" placeholder="Wind Speed (km/h)" />
+        <input id="windDir" class="in" placeholder="Wind Direction" />
+      </div>
+    </div>
 
-    <label>Photo</label>
-    <input type="file" id="photoInput" accept="image/*" capture="environment">
-    <img id="photoPreview" style="display:none;max-width:100%;margin-top:6px;border-radius:8px"/>
+    <div class="card form-section">
+      <div class="form-title">5️⃣ Select Weed</div>
+      <select id="weedSelect" class="in"></select>
+    </div>
 
-    <div class="row gap mt">
-      <button id="saveTask" class="pill">💾 Save</button>
-      <button id="saveDraft" class="pill">🗂️ Save as Draft</button>
+    <div class="card form-section">
+      <div class="form-title">6️⃣ Select Batch</div>
+      <select id="batchSelect" class="in"></select>
+    </div>
+
+    <div class="card form-section">
+      <div class="form-title">7️⃣ Times</div>
+      <div class="grid two">
+        <input id="startTime" type="time" class="in" />
+        <input id="endTime" type="time" class="in" />
+      </div>
+    </div>
+
+    <div class="card form-section">
+      <div class="form-title">8️⃣ Notes</div>
+      <textarea id="notes" class="in" rows="3" placeholder="Notes"></textarea>
+    </div>
+
+    <div id="roadTrackBlock" class="card form-section" style="display:none">
+      <div class="form-title">🛣️ Roadside Tracking</div>
+      <div class="row gap">
+        <button id="trackStart" class="pill emph">▶️ Start</button>
+        <button id="trackStop" class="pill warn">⏹ Stop</button>
+      </div>
+    </div>
+
+    <div class="card form-section sticky-action">
+      <div class="row end gap">
+        <button id="saveDraft" class="pill">🗂 Save Draft</button>
+        <button id="saveTask" class="pill emph">💾 Save Task</button>
+      </div>
     </div>
   </div>
 
   <!-- Records -->
   <div id="records" class="screen">
+    <button class="pill" id="homeBtn2">🏠 Home</button>
     <h2>Records</h2>
     <div class="search-block">
-      <input id="recSearch" placeholder="Search by name or road">
-      <input type="date" id="recFrom">
-      <input type="date" id="recTo">
+      <input id="recSearch" class="in" placeholder="Search: job / road / weed / batch / council #" />
+      <div class="grid two">
+        <input id="recFrom" type="date" class="in" />
+        <input id="recTo" type="date" class="in" />
+      </div>
+      <div class="row wrap gap">
+        <label class="chip"><input type="checkbox" id="fInspection"> Inspection</label>
+        <label class="chip"><input type="checkbox" id="fSpot"> Spot Spray</label>
+        <label class="chip"><input type="checkbox" id="fRoad"> Road Spray</label>
+        <label class="chip"><input type="checkbox" id="fComplete"> Complete</label>
+        <label class="chip"><input type="checkbox" id="fIncomplete"> Incomplete</label>
+        <label class="chip"><input type="checkbox" id="fDraft"> Draft</label>
+      </div>
     </div>
-    <div class="row gap">
-      <label><input type="checkbox" id="fInspection"> Inspection</label>
-      <label><input type="checkbox" id="fSpot"> Spot Spray</label>
-      <label><input type="checkbox" id="fRoad"> Road Spray</label>
-      <label><input type="checkbox" id="fComplete"> Complete</label>
-      <label><input type="checkbox" id="fIncomplete"> Incomplete</label>
-      <label><input type="checkbox" id="fDraft"> Draft</label>
-    </div>
-    <div class="row gap mt">
-      <button id="recSearchBtn" class="pill">Search</button>
-      <button id="recResetBtn" class="pill">Reset</button>
-    </div>
-    <div id="recordsList" class="mt"></div>
-  </div>
-
-  <!-- Chemical Inventory -->
-  <div id="chemInventory" class="screen">
-    <h2>Chemical Inventory</h2>
-    <div id="chemList" class="mt"></div>
+    <div id="recordsList" class="list"></div>
   </div>
 
   <!-- Batches -->
   <div id="batches" class="screen">
+    <button class="pill" id="homeBtn3">🏠 Home</button>
     <h2>Batches</h2>
-    <div class="row gap mt">
-      <button id="newBatch" class="pill">➕ Create Batch</button>
-    </div>
     <div class="search-block">
-      <input id="batQuery" placeholder="Search by name or road">
-      <input type="date" id="batFrom">
-      <input type="date" id="batTo">
+      <input id="batSearch" class="in" placeholder="Search: batch ID / chemical / job / road" />
+      <div class="grid two">
+        <input id="batFrom" type="date" class="in" />
+        <input id="batTo" type="date" class="in" />
+      </div>
     </div>
-    <div class="row gap mt">
-      <button id="batSearchBtn" class="pill">Search</button>
-      <button id="batResetBtn" class="pill">Reset</button>
-    </div>
-    <div id="batchList" class="mt"></div>
-  </div>
-
-  <!-- Procurement List -->
-  <div id="procurement" class="screen">
-    <h2>Procurement List</h2>
-    <div id="procList"></div>
+    <div id="batchList" class="list"></div>
   </div>
 
   <!-- Mapping -->
   <div id="mapping" class="screen">
+    <button class="pill" id="homeBtn4">🏠 Home</button>
     <h2>Mapping</h2>
-    <div id="mapWrap">
-      <div id="map"></div>
-    </div>
-
-    <div class="search-block mt">
-      <input id="mapQuery" placeholder="Search by name or road">
-      <input id="mapWeed" placeholder="Weed name">
-      <select id="mapType">
-        <option value="All">All Types</option>
-        <option>Inspection</option>
-        <option>Spot Spray</option>
-        <option>Road Spray</option>
-      </select>
-      <input type="date" id="mapFrom">
-      <input type="date" id="mapTo">
-    </div>
-    <div class="row gap mt">
-      <button id="mapSearchBtn" class="pill">Search</button>
-      <button id="mapResetBtn" class="pill">Reset</button>
+    <div id="mapWrap" class="map-wrap">
+      <div id="map" class="map"></div>
+      <button id="locateTop" class="locate-fab pill">Locate Me</button>
     </div>
   </div>
 
   <!-- Settings -->
   <div id="settings" class="screen">
+    <button class="pill" id="homeBtn5">🏠 Home</button>
     <h2>Settings</h2>
-    <div class="form-section">
-      <button id="clearDataBtn" class="pill warn">🗑️ Clear All Data</button>
+    <div class="row gap">
+      <button id="exportDataBtn" class="pill">📤 Export Data</button>
+      <button id="clearDataBtn" class="pill warn">🧹 Clear All Data</button>
     </div>
   </div>
 
-  <!-- Spinner Overlay -->
-  <div id="spinnerOverlay">Working…</div>
+  <!-- Spinner overlay -->
+  <div id="spinner" class="spinner-overlay">
+    <div class="spinner"></div>
+    <div id="spinnerMsg" class="spinner-msg">Working…</div>
+  </div>
 
-  <!-- Scripts -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="apps.js"></script>
-
+  <!-- Fix Pack placeholder -->
+  <script src="fixpack.js"></script>
 </body>
 </html>
