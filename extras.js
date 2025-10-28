@@ -1,5 +1,5 @@
-// extras.js — WeedTracker V60 Pilot
-// Handles location, weather, UI helpers, and date formatting.
+/* WeedTracker V60 Pilot — extras.js */
+/* Splash screen fade, weather fetch, GPS, auto-name and UI helpers */
 
 document.addEventListener("DOMContentLoaded", () => {
   fadeSplash();
@@ -7,91 +7,53 @@ document.addEventListener("DOMContentLoaded", () => {
   initReminderDropdown();
 });
 
-// ===== Splash Fade =====
+/* ---------- Splash ---------- */
 function fadeSplash() {
   const splash = document.getElementById("splash");
+  if (!splash) return;
   setTimeout(() => splash.classList.add("fade"), 1000);
   setTimeout(() => splash.remove(), 1800);
 }
 
-// ===== Spinner / Toast =====
+/* ---------- Spinner / Toast ---------- */
 function showSpinner(msg = "Working…") {
   const s = document.getElementById("spinner");
+  if (!s) return;
   document.getElementById("spinnerMsg").textContent = msg;
   s.classList.add("active");
 }
 function hideSpinner() {
-  document.getElementById("spinner").classList.remove("active");
+  document.getElementById("spinner")?.classList.remove("active");
 }
 function showToast(msg, duration = 2500) {
   const div = document.createElement("div");
   div.className = "toast";
   div.textContent = msg;
-  Object.assign(div.style, {
-    position: "fixed",
-    bottom: "30px",
-    left: "50%",
-    transform: "translateX(-50%)",
-    background: "#333",
-    color: "#fff",
-    padding: "10px 18px",
-    borderRadius: "8px",
-    zIndex: 9999,
-    fontSize: "14px",
-  });
   document.body.appendChild(div);
   setTimeout(() => div.remove(), duration);
 }
 
-// ===== Auto Name =====
+/* ---------- GPS + Reverse Geocode ---------- */
 async function getRoadName(lat, lon) {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`
     );
     const data = await res.json();
-    return data.address.road || "Unknown Road";
+    return data.address.road || data.display_name || "Unknown Road";
   } catch {
     return "Unknown Road";
   }
 }
 
-async function autoNameJob(jobType) {
-  const locEl = document.getElementById("locRoad");
-  const nameEl = document.getElementById("jobName");
-
-  if (locEl.textContent === "Unknown") {
-    showToast("Location not set. Tap Get Location first.");
-    return;
-  }
-
-  const now = new Date();
-  const dd = String(now.getDate()).padStart(2, "0");
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const yy = String(now.getFullYear()).slice(-2);
-
-  const road = locEl.textContent.replace(/\s+/g, "");
-  const typeLetter =
-    jobType === "Inspection"
-      ? "I"
-      : jobType === "Spot Spray"
-      ? "S"
-      : "R";
-
-  const jobName = `${road}${dd}${mm}${yy}${typeLetter}`;
-  nameEl.value = jobName;
-}
-
-// ===== GPS =====
 async function getLocation() {
   if (!navigator.geolocation) {
     alert("GPS not supported on this device.");
     return;
   }
-
-  showSpinner("Getting location...");
+  showSpinner("Getting location…");
   navigator.geolocation.getCurrentPosition(
-    async (pos) => {
+    async pos => {
       const { latitude, longitude } = pos.coords;
       const road = await getRoadName(latitude, longitude);
       document.getElementById("locRoad").textContent = road;
@@ -100,7 +62,7 @@ async function getLocation() {
       hideSpinner();
       showToast(`📍 ${road}`);
     },
-    (err) => {
+    err => {
       hideSpinner();
       alert("Location error: " + err.message);
     },
@@ -108,11 +70,26 @@ async function getLocation() {
   );
 }
 
-// ===== Weather =====
+/* ---------- Auto Name Job ---------- */
+function autoNameJob(jobType) {
+  const road = document.getElementById("locRoad")?.textContent || "Unknown";
+  if (road === "Unknown") {
+    showToast("Location not set. Tap Get Location first.");
+    return;
+  }
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  const prefix = jobType === "Inspection" ? "I" : jobType === "Spot Spray" ? "SS" : "RS";
+  const jobName = `${road.replace(/\s+/g, "")}${dd}${mm}${yyyy}_${prefix}`;
+  document.getElementById("jobName").value = jobName;
+}
+
+/* ---------- Weather Fetch ---------- */
 async function getWeather() {
   try {
     showSpinner("Fetching weather…");
-
     const lat = localStorage.getItem("lastLat");
     const lon = localStorage.getItem("lastLon");
     if (!lat || !lon) {
@@ -120,19 +97,15 @@ async function getWeather() {
       hideSpinner();
       return;
     }
-
-    // Use open-meteo API
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
     const res = await fetch(url);
     const data = await res.json();
     const wx = data.current_weather;
-
     document.getElementById("temp").value = wx.temperature;
     document.getElementById("wind").value = wx.windspeed;
     document.getElementById("windDir").value = `${wx.winddirection}°`;
-    document.getElementById("humidity").value = 65; // placeholder humidity (not in open-meteo basic API)
+    document.getElementById("humidity").value = 65; // placeholder
     document.getElementById("wxUpdated").textContent = new Date().toLocaleTimeString();
-
     hideSpinner();
     showToast("🌦 Weather updated");
   } catch (e) {
@@ -141,50 +114,44 @@ async function getWeather() {
   }
 }
 
-// ===== Helpers =====
+/* ---------- Reminder Dropdown ---------- */
 function initReminderDropdown() {
   const sel = document.getElementById("reminderWeeks");
   if (!sel) return;
-  for (let i = 0; i <= 24; i += 3) {
-    const opt = document.createElement("option");
-    opt.textContent = i === 0 ? "None" : `${i} weeks`;
-    opt.value = i;
-    sel.appendChild(opt);
+  if (sel.options.length <= 2) {
+    for (let i = 1; i <= 52; i++) {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = `${i} weeks`;
+      sel.appendChild(opt);
+    }
   }
 }
 
-// ===== Button bindings =====
+/* ---------- Buttons Binding & Navigation ---------- */
 function setupButtons() {
-  const homeBtn = document.getElementById("homeBtn");
-  if (homeBtn)
-    homeBtn.addEventListener("click", () => switchScreen("home"));
-
-  const locBtn = document.getElementById("locateBtn");
-  if (locBtn) locBtn.addEventListener("click", getLocation);
-
-  const autoNameBtn = document.getElementById("autoNameBtn");
-  if (autoNameBtn)
-    autoNameBtn.addEventListener("click", () =>
-      autoNameJob(document.getElementById("taskType").value)
-    );
-
-  const wxBtn = document.getElementById("autoWeatherBtn");
-  if (wxBtn) wxBtn.addEventListener("click", getWeather);
+  const homeBtns = document.querySelectorAll("[id^='homeBtn']");
+  homeBtns.forEach(b => b.addEventListener("click", () => switchScreen("home")));
+  document.getElementById("locateBtn")?.addEventListener("click", getLocation);
+  document.getElementById("autoNameBtn")?.addEventListener("click", () =>
+    autoNameJob(document.getElementById("taskType").value)
+  );
+  document.getElementById("autoWeatherBtn")?.addEventListener("click", getWeather);
 }
 
-// ===== Screen Navigation =====
+/* ---------- Screen Switcher ---------- */
 function switchScreen(id) {
-  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   const el = document.getElementById(id);
   if (el) el.classList.add("active");
   window.scrollTo(0, 0);
 }
 
-// Expose global functions
-window.getWeather = getWeather;
+/* ---------- Exports ---------- */
 window.getLocation = getLocation;
 window.autoNameJob = autoNameJob;
-window.switchScreen = switchScreen;
+window.getWeather = getWeather;
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.showToast = showToast;
+window.switchScreen = switchScreen;
