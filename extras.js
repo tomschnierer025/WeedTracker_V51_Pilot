@@ -1,87 +1,84 @@
-/* === WeedTracker V60 Pilot — extras.js === */
-/* Helpers: AU date, Apple Maps, spinner/toast, weather, popups */
+/* === WeedTracker V60 Pilot — extras.js ===
+   Shared helper utilities: date/time formatting, popup helpers,
+   dynamic lists, Apple Maps launcher, and AU conventions.
+*/
 
-window.WTExtras = (() => {
-  const EX = {};
-  const $ = (s, r = document) => r.querySelector(s);
+window.WeedExtras = (() => {
+  const X = {};
 
-  EX.todayISO = () => new Date().toISOString().split("T")[0];
-  EX.formatDateAU = (d) => {
+  // ---------- Date helpers ----------
+  X.todayISO = () => new Date().toISOString().split("T")[0];
+  X.nowTime = () => new Date().toTimeString().slice(0,5);
+  X.auDate = (d) => {
     const dt = d instanceof Date ? d : new Date(d);
-    const dd = String(dt.getDate()).padStart(2, "0");
-    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2,"0");
+    const mm = String(dt.getMonth()+1).padStart(2,"0");
     const yyyy = dt.getFullYear();
     return `${dd}-${mm}-${yyyy}`;
   };
-  EX.formatDateAUCompact = (d) => {
+  X.auCompact = (d) => {
     const dt = d instanceof Date ? d : new Date(d);
-    const dd = String(dt.getDate()).padStart(2, "0");
-    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2,"0");
+    const mm = String(dt.getMonth()+1).padStart(2,"0");
     const yyyy = dt.getFullYear();
     return `${dd}${mm}${yyyy}`;
   };
-  EX.nowTime = () => new Date().toTimeString().slice(0,5);
 
-  // Spinner
-  EX.spin = (on, msg = "Working…") => {
-    const ov = $("#spinnerOverlay"); if (!ov) return;
-    $("#spinnerMsg").textContent = msg;
-    ov.classList[on ? "add" : "remove"]("active");
+  // ---------- Popup builder ----------
+  X.popup = (title, html, opts={}) => {
+    const modal = document.createElement("div");
+    modal.className = "popup";
+    modal.innerHTML = `
+      <h3 style="margin-top:0">${title}</h3>
+      <div class="popup-body">${html}</div>
+      <button id="popCloseBtn">Close</button>`;
+    document.body.appendChild(modal);
+    modal.querySelector("#popCloseBtn").addEventListener("click", ()=> modal.remove());
+    if (opts.autoClose) setTimeout(()=> modal.remove(), opts.autoClose);
+    return modal;
   };
 
-  // Toast (simple)
-  EX.toast = (msg, ms = 1600) => {
-    const d = document.createElement("div");
-    d.textContent = msg;
-    Object.assign(d.style, {
-      position: "fixed", bottom: "16px", left: "50%", transform: "translateX(-50%)",
-      background: "#d9f7d9", color: "#063", padding: ".6rem 1rem", borderRadius: "20px",
-      boxShadow: "0 2px 8px rgba(0,0,0,.25)", zIndex: 4000, fontWeight: 800
+  // ---------- Toasts ----------
+  X.toast = (msg, ms=1800)=>{
+    const d=document.createElement("div");
+    d.textContent=msg;
+    Object.assign(d.style,{
+      position:"fixed",bottom:"1.2rem",left:"50%",transform:"translateX(-50%)",
+      background:"#222",color:"#fff",padding:".5rem 1rem",borderRadius:"1rem",
+      zIndex:2000,boxShadow:"0 2px 6px rgba(0,0,0,.3)"
     });
-    document.body.appendChild(d); setTimeout(() => d.remove(), ms);
+    document.body.appendChild(d);
+    setTimeout(()=>d.remove(),ms);
   };
 
-  // Apple Maps navigate
-  EX.openAppleMaps = (lat, lon) => {
-    const mapsURL = `maps://?daddr=${lat},${lon}&dirflg=d`;
-    const webURL = `https://maps.apple.com/?daddr=${lat},${lon}&dirflg=d`;
-    const a = document.createElement("a"); a.href = mapsURL; document.body.appendChild(a); a.click();
-    setTimeout(() => { window.open(webURL, "_blank"); a.remove(); }, 250);
+  // ---------- Apple Maps Launcher ----------
+  X.openAppleMaps = (lat, lon, name="WeedTracker Location") => {
+    const url = `maps://?daddr=${lat},${lon}&q=${encodeURIComponent(name)}`;
+    const alt = `https://maps.apple.com/?daddr=${lat},${lon}&q=${encodeURIComponent(name)}`;
+    const a=document.createElement("a");
+    a.href=url; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ window.open(alt, "_blank"); a.remove(); }, 250);
   };
 
-  // Weather (open-meteo, current)
-  EX.fillWeather = async () => {
-    if (!navigator.geolocation) { EX.toast("Enable location services"); return; }
-    EX.spin(true, "Fetching weather…");
-    navigator.geolocation.getCurrentPosition(async pos => {
-      try{
-        const { latitude, longitude } = pos.coords;
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`;
-        const r = await fetch(url); const j = await r.json(); const c = j.current || {};
-        $("#temp").value = c.temperature_2m ?? "";
-        $("#wind").value = c.wind_speed_10m ?? "";
-        $("#windDir").value = (c.wind_direction_10m ?? "") + (c.wind_direction_10m!=null ? "°" : "");
-        $("#humidity").value = c.relative_humidity_2m ?? "";
-        $("#wxUpdated").textContent = "Updated @ " + EX.nowTime();
-        EX.spin(false); EX.toast("🌦 Weather updated");
-      }catch(e){ EX.spin(false); alert("Weather fetch failed"); }
-    }, ()=>{ EX.spin(false); EX.toast("Location not available"); });
+  // ---------- Unified filter reset ----------
+  X.resetFilters = (ids)=>{
+    ids.forEach(id=>{
+      const el=document.getElementById(id);
+      if(!el) return;
+      if(el.type==="checkbox") el.checked=false;
+      else el.value="";
+    });
   };
 
-  // Popup shell
-  EX.popup = (html) => {
-    const wrap = document.createElement("div");
-    wrap.className = "modal";
-    const card = document.createElement("div");
-    card.className = "card p";
-    card.innerHTML = html;
-    wrap.appendChild(card);
-    wrap.addEventListener("click", e => { if (e.target === wrap) wrap.remove(); });
-    document.addEventListener("keydown", escClose, { once: true });
-    document.body.appendChild(wrap);
-    function escClose(ev){ if (ev.key === "Escape") wrap.remove(); }
-    return wrap;
+  // ---------- Safe JSON helpers ----------
+  X.safeParse = (t, def)=>{ try{return JSON.parse(t);}catch{return def;} };
+  X.safeString = (obj)=>{ try{return JSON.stringify(obj,null,2);}catch{return "{}";} };
+
+  // ---------- Weather helpers ----------
+  X.fetchWeather = async (lat, lon)=>{
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`;
+    const r=await fetch(url); const j=await r.json(); return j.current||{};
   };
 
-  return EX;
+  return X;
 })();
