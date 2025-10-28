@@ -1,67 +1,75 @@
-/* === WeedTracker V60 Pilot — storage.js === */
-window.WTStorage = (() => {
-  const KEY = "weedtracker_data_v60";
-  const BACKUP_KEY = "weedtracker_backup_v60";
-  const MAX_BACKUPS = 3;
+/* === WeedTracker V60 Pilot - storage.js === */
+/* Handles localStorage operations and backup/export/import */
 
-  const load = () => {
-    try { return JSON.parse(localStorage.getItem(KEY) || "{}"); }
-    catch { return {}; }
-  };
-  const save = (db, backup = true) => {
-    localStorage.setItem(KEY, JSON.stringify(db));
-    if (backup) {
-      try {
-        const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
-        arr.unshift({ ts: new Date().toISOString(), db });
-        while (arr.length > MAX_BACKUPS) arr.pop();
-        localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
-      } catch {}
+window.WeedStorage = (() => {
+  const ST = {};
+  const KEY = "weedtracker_v60_data";
+
+  ST.load = () => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return { tasks: [], batches: [], chems: [], procurement: [] };
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn("Load error", e);
+      return { tasks: [], batches: [], chems: [], procurement: [] };
     }
   };
-  const clearAll = () => {
-    if (!confirm("Clear all data?")) return;
-    localStorage.removeItem(KEY);
-    alert("All data cleared.");
-    location.reload();
-  };
-  const exportJSON = (db) => {
-    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "weedtracker_v60_backup.json"; a.click();
-    URL.revokeObjectURL(url);
-  };
-  const latestBackup = () => {
+
+  ST.save = (data) => {
     try {
-      const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
-      return arr[0]?.db || null;
-    } catch { return null; }
+      localStorage.setItem(KEY, JSON.stringify(data));
+      console.log("✅ Data saved");
+    } catch (e) {
+      alert("Save error: " + e);
+    }
   };
-  const restoreLatest = () => {
-    const db = latestBackup();
-    if (!db) return null;
-    localStorage.setItem(KEY, JSON.stringify(db));
-    return db;
+
+  ST.export = (data) => {
+    try {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "weedtracker_v60_backup.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Export failed: " + e);
+    }
   };
-  const importJSON = (cb) => {
+
+  ST.import = (callback) => {
     const inp = document.createElement("input");
-    inp.type = "file"; inp.accept = "application/json";
+    inp.type = "file";
+    inp.accept = "application/json";
     inp.onchange = (e) => {
-      const f = e.target.files?.[0]; if (!f) return;
-      const rd = new FileReader();
-      rd.onload = (ev) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (r) => {
         try {
-          const json = JSON.parse(ev.target.result);
+          const json = JSON.parse(r.target.result);
           localStorage.setItem(KEY, JSON.stringify(json));
-          alert("Data restored.");
-          cb && cb(json);
-        } catch (err) { alert("Invalid file: " + err); }
+          alert("✅ Data restored successfully.");
+          if (callback) callback(json);
+        } catch (err) {
+          alert("Import failed: " + err);
+        }
       };
-      rd.readAsText(f);
+      reader.readAsText(file);
     };
     inp.click();
   };
 
-  return { load, save, clearAll, exportJSON, restoreLatest, importJSON };
+  ST.clear = () => {
+    if (!confirm("Clear ALL data? This cannot be undone.")) return;
+    localStorage.removeItem(KEY);
+    alert("All WeedTracker data cleared.");
+    location.reload();
+  };
+
+  return ST;
 })();
