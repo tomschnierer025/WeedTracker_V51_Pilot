@@ -1,82 +1,62 @@
-/* === WeedTracker V60 Pilot - storage.js === */
-/* Local storage, saving, restoring, export/import logic */
+/* === WeedTracker V60.4 Pilot - storage.js === */
+/* Handles saving, loading, exporting, importing all app data */
 
 window.WeedStorage = (() => {
   const ST = {};
-  const KEY = "weedtracker_data_v60";
-  const BACKUP_KEY = "weedtracker_backup_v60";
+  const KEY = "weedtracker_v60_4";
 
-  /* ===== LOAD ===== */
+  /* ===== Load data ===== */
   ST.load = () => {
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) return { tasks: [], batches: [], chems: [], procurement: [], weeds: [] };
+      if (!raw) {
+        return {
+          tasks: [],
+          batches: [],
+          chems: [],
+          procurement: [],
+          accountEmail: ""
+        };
+      }
       return JSON.parse(raw);
     } catch (e) {
       console.warn("Load error", e);
-      return { tasks: [], batches: [], chems: [], procurement: [], weeds: [] };
+      return {
+        tasks: [],
+        batches: [],
+        chems: [],
+        procurement: [],
+        accountEmail: ""
+      };
     }
   };
 
-  /* ===== SAVE ===== */
+  /* ===== Save data ===== */
   ST.save = (data) => {
     try {
       localStorage.setItem(KEY, JSON.stringify(data));
-      ST.backup(data);
-      console.log("Data saved to localStorage");
+      console.log("✅ Data saved");
     } catch (e) {
-      alert("Save error: " + e);
+      alert("Save error: " + e.message);
     }
   };
 
-  /* ===== BACKUP ===== */
-  ST.backup = (data) => {
-    try {
-      const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
-      arr.unshift({ ts: new Date().toISOString(), data });
-      while (arr.length > 3) arr.pop();
-      localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
-    } catch (e) {
-      console.warn("Backup failed", e);
-    }
-  };
-
-  /* ===== RESTORE ===== */
-  ST.restore = () => {
-    try {
-      const arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
-      if (!arr.length) {
-        alert("No backup found");
-        return null;
-      }
-      const latest = arr[0].data;
-      localStorage.setItem(KEY, JSON.stringify(latest));
-      alert("Backup restored successfully.");
-      return latest;
-    } catch (e) {
-      alert("Restore failed: " + e);
-      return null;
-    }
-  };
-
-  /* ===== EXPORT ===== */
+  /* ===== Export backup ===== */
   ST.export = (data) => {
     try {
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json",
-      });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "weedtracker_backup.json";
+      a.download = "WeedTracker_Backup_V60.4.json";
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert("Export failed: " + e);
+      alert("Export failed: " + e.message);
     }
   };
 
-  /* ===== IMPORT ===== */
+  /* ===== Import backup ===== */
   ST.import = (callback) => {
     const inp = document.createElement("input");
     inp.type = "file";
@@ -89,10 +69,10 @@ window.WeedStorage = (() => {
         try {
           const json = JSON.parse(r.target.result);
           localStorage.setItem(KEY, JSON.stringify(json));
-          alert("Data restored successfully.");
+          alert("✅ Data restored successfully.");
           if (callback) callback(json);
         } catch (err) {
-          alert("Import failed: " + err);
+          alert("Import failed: " + err.message);
         }
       };
       reader.readAsText(file);
@@ -100,11 +80,11 @@ window.WeedStorage = (() => {
     inp.click();
   };
 
-  /* ===== CLEAR ===== */
+  /* ===== Clear data ===== */
   ST.clear = () => {
-    if (!confirm("Clear ALL local WeedTracker data?")) return;
+    if (!confirm("⚠️ Are you sure you want to clear ALL data? This cannot be undone.")) return;
     localStorage.removeItem(KEY);
-    alert("All data cleared. App will reload.");
+    alert("🧹 All data cleared.");
     location.reload();
   };
 
