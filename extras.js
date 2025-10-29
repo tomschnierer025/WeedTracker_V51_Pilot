@@ -1,10 +1,10 @@
-/* === WeedTracker V60 Pilot - extras.js === */
-/* Supportive functions and helpers: weather, navigation, filters, etc. */
+/* === WeedTracker V60.4 Pilot - extras.js === */
+/* Helper utilities for weather, Apple Maps, filters, popups, and formatting */
 
 window.WeedExtras = (() => {
   const EX = {};
 
-  /* ===== WEATHER ===== */
+  /* ===== WEATHER (Auto Fetch) ===== */
   EX.getWeather = async () => {
     try {
       const pos = await new Promise((res, rej) => {
@@ -15,11 +15,11 @@ window.WeedExtras = (() => {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
       const r = await fetch(url);
       const j = await r.json();
-      const w = j.current_weather;
-      document.getElementById("temp").value = w.temperature;
-      document.getElementById("wind").value = w.windspeed;
-      document.getElementById("windDir").value = w.winddirection + "°";
-      document.getElementById("humidity").value = w.relative_humidity || 50;
+      const w = j.current_weather || {};
+      document.getElementById("temp").value = w.temperature ?? "";
+      document.getElementById("wind").value = w.windspeed ?? "";
+      document.getElementById("windDir").value = (w.winddirection ?? "") + "°";
+      document.getElementById("humidity").value = w.relative_humidity ?? 50;
       document.getElementById("wxUpdated").textContent =
         "Weather updated: " + new Date().toLocaleTimeString();
     } catch (e) {
@@ -40,17 +40,7 @@ window.WeedExtras = (() => {
     setTimeout(() => {
       window.open(webURL, "_blank");
       a.remove();
-    }, 300);
-  };
-
-  /* ===== FILTER RESET ===== */
-  EX.resetFilters = (group) => {
-    document
-      .querySelectorAll(`#${group} input[type=text], #${group} input[type=date]`)
-      .forEach((i) => (i.value = ""));
-    document
-      .querySelectorAll(`#${group} input[type=checkbox]`)
-      .forEach((i) => (i.checked = false));
+    }, 400);
   };
 
   /* ===== DATE FORMATTING ===== */
@@ -70,74 +60,72 @@ window.WeedExtras = (() => {
     return `${dd}${mm}${yyyy}`;
   };
 
-  /* ===== POPUPS ===== */
-  EX.createPopup = (title, html) => {
+  /* ===== FILTER RESET ===== */
+  EX.resetFilters = (group) => {
+    document
+      .querySelectorAll(`#${group} input[type=text], #${group} input[type=date]`)
+      .forEach((i) => (i.value = ""));
+    document
+      .querySelectorAll(`#${group} input[type=checkbox]`)
+      .forEach((i) => (i.checked = false));
+  };
+
+  /* ===== POPUP CREATION ===== */
+  EX.popup = (title, html) => {
     const div = document.createElement("div");
-    div.className = "popup";
-    div.innerHTML = `<h3>${title}</h3><div>${html}</div>
-      <button class="closePopup">Close</button>`;
+    div.className = "modal";
+    div.innerHTML = `
+      <div class="card p scrollable" style="max-width:440px;width:95%">
+        <h3>${title}</h3>
+        <div>${html}</div>
+        <div class="row gap end mt-2">
+          <button class="pill warn" id="closePopup">Close</button>
+        </div>
+      </div>`;
     document.body.appendChild(div);
-    div.querySelector(".closePopup").onclick = () => div.remove();
+    div.querySelector("#closePopup").onclick = () => div.remove();
   };
 
-  /* ===== RECORD POPUPS ===== */
-  EX.createRecordPopup = (rec) => {
-    const html = `
-      <p><b>Type:</b> ${rec.type}<br>
-      <b>Weed:</b> ${rec.weed}<br>
-      <b>Batch:</b> ${rec.batch}<br>
-      <b>Date:</b> ${EX.formatDateAU(rec.date)}<br>
-      <b>Weather:</b> ${rec.temp}°C, ${rec.wind} km/h ${rec.windDir}, ${rec.humidity}%<br>
-      <b>Status:</b> ${rec.status}<br>
-      <b>Notes:</b> ${rec.notes || ""}</p>
-      <button class="navBtn">Navigate</button>`;
-    const div = document.createElement("div");
-    div.className = "popup";
-    div.innerHTML = `<h3>${rec.name}</h3>${html}<button class="closePopup">Close</button>`;
-    document.body.appendChild(div);
-    div.querySelector(".closePopup").onclick = () => div.remove();
-    const navBtn = div.querySelector(".navBtn");
-    if (navBtn) {
-      navBtn.onclick = () => {
-        if (rec.coords && rec.coords.length > 0) {
-          const [lat, lon] = rec.coords[0];
-          EX.navigateAppleMaps(lat, lon);
-        } else alert("No coordinates for this record.");
-      };
-    }
-  };
-
-  /* ===== BATCH POPUPS ===== */
-  EX.createBatchPopup = (batch) => {
-    const html = `
-      <p><b>Date:</b> ${EX.formatDateAU(batch.date)}<br>
-      <b>Time:</b> ${batch.time || "--"}<br>
-      <b>Total Mix:</b> ${batch.mix} L<br>
-      <b>Remaining:</b> ${batch.remaining || batch.mix} L<br>
-      <b>Chemicals:</b><br>${batch.chemicals}</p>`;
-    EX.createPopup(batch.id, html);
-  };
-
-  /* ===== MAP PIN POPUPS ===== */
-  EX.createMapPinPopup = (map, data) => {
+  /* ===== MAP PIN POPUP ===== */
+  EX.createMapPins = (map, data) => {
     if (!map || !Array.isArray(data)) return;
     data.forEach((rec) => {
       if (!rec.coords || rec.coords.length === 0) return;
       const [lat, lon] = rec.coords[0];
       const marker = L.marker([lat, lon]).addTo(map);
       marker.bindPopup(
-        `<b>${rec.name}</b><br>${rec.type} - ${EX.formatDateAU(rec.date)}<br>
-        <button class="pinNav" data-lat="${lat}" data-lon="${lon}">Navigate</button>`
+        `<b>${rec.name}</b><br>${rec.type}<br>${EX.formatDateAU(rec.date)}<br>
+        <button class="pill small pinNav" data-lat="${lat}" data-lon="${lon}">Navigate</button>`
       );
     });
     map.on("popupopen", (e) => {
       const btn = e.popup._contentNode.querySelector(".pinNav");
       if (btn) {
-        btn.onclick = () => {
+        btn.onclick = () =>
           EX.navigateAppleMaps(btn.dataset.lat, btn.dataset.lon);
-        };
       }
     });
+  };
+
+  /* ===== TOAST MESSAGE ===== */
+  EX.toast = (msg, ms = 2000) => {
+    const d = document.createElement("div");
+    d.textContent = msg;
+    Object.assign(d.style, {
+      position: "fixed",
+      bottom: "1.2rem",
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "#2ecc71",
+      color: "#fff",
+      padding: ".6rem 1.2rem",
+      borderRadius: "20px",
+      boxShadow: "0 2px 8px rgba(0,0,0,.25)",
+      zIndex: 9999,
+      fontWeight: 600,
+    });
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), ms);
   };
 
   return EX;
