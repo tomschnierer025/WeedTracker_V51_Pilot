@@ -1,24 +1,21 @@
-/* === WeedTracker V60 Pilot - styles.css ===
-   Complete visual layout and theming
-   Charcoal background, white inputs, coloured home buttons
-*/
+/* === WeedTracker V60 Pilot Styles === */
 
 :root {
-  --bg: #1e1e1e;
-  --text: #f0f0f0;
-  --accent: #00a86b;
-  --dim: #999;
-  --border: #333;
-
-  --btn-green: #00a86b;
-  --btn-blue: #2e86de;
-  --btn-orange: #e67e22;
+  --bg: #e6e6e6;
+  --text: #111;
+  --dim: #555;
+  --accent: #145c38;
+  --border: #bbb;
+  --btn-green: #228b22;
+  --btn-blue: #337ab7;
+  --btn-orange: #e68a00;
   --btn-brown: #8b4513;
   --btn-teal: #009688;
   --btn-gray: #555;
-  --btn-red: #c0392b;
+  --btn-red: #b30000;
 }
 
+/* Base layout */
 html, body {
   margin: 0;
   padding: 0;
@@ -29,30 +26,26 @@ html, body {
   overflow-x: hidden;
 }
 
-h1, h2, h3 {
+h2, h3 {
   text-align: center;
   color: var(--accent);
-  margin: 0.5rem 0;
+  margin-bottom: .4rem;
 }
 
 label {
   display: block;
   font-weight: 600;
-  margin-top: 0.5rem;
+  margin-top: .5rem;
+  margin-bottom: .15rem;
 }
 
 input, select, textarea, button {
   font-size: 1rem;
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 0.4rem;
+  padding: .4rem;
   width: 100%;
   box-sizing: border-box;
-}
-
-input, select, textarea {
-  background: #fff;
-  color: #000;
 }
 
 textarea {
@@ -62,7 +55,7 @@ textarea {
 button {
   cursor: pointer;
   background: #fff;
-  transition: background 0.3s, color 0.3s;
+  transition: background .3s, color .3s;
 }
 
 button:hover {
@@ -82,12 +75,16 @@ button.warn {
 
 .screen.active {
   display: block;
-  animation: fadein 0.5s;
+  animation: fadein .4s;
 }
 
 .grid {
   display: grid;
-  gap: 0.5rem;
+  gap: .5rem;
+}
+
+.grid.four {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .grid.seven {
@@ -110,62 +107,59 @@ button.warn {
 }
 
 .row.gap > * + * {
-  margin-left: 0.5rem;
+  margin-left: .5rem;
 }
 
 .dim {
-  font-size: 0.9rem;
+  font-size: .9rem;
   color: var(--dim);
 }
 
+/* Lists */
 .list .item {
-  background: #222;
+  background: #fff;
   border-radius: 6px;
-  padding: 0.5rem 0.7rem;
-  margin-bottom: 0.4rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  padding: .5rem .7rem;
+  margin-bottom: .4rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.15);
 }
 
+/* Filters */
 .filters {
-  background: #2a2a2a;
-  padding: 0.6rem;
+  background: #f0f0f0;
+  padding: .6rem;
   border-radius: 8px;
-  margin-bottom: 0.8rem;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.1);
+  margin-bottom: .8rem;
 }
 
-.filters label {
-  font-weight: 500;
-  color: var(--text);
-}
-
+/* Home Button */
 .home-btn {
   position: fixed;
-  top: 12px;
-  right: 12px;
-  background: var(--btn-green);
-  border: none;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--accent);
   color: #fff;
-  border-radius: 50%;
-  width: 55px;
-  height: 55px;
-  font-size: 1.4rem;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  padding: .6rem;
+  border: none;
+  font-size: 1rem;
+  font-weight: bold;
+  text-align: center;
   z-index: 999;
 }
+.home-btn:hover { background: #0f4b2e; }
 
-.home-btn:hover {
-  background: #018a58;
-}
-
-/* Home screen buttons */
+/* Home Buttons Color Layout */
 .grid.seven button:nth-child(1) { background: var(--btn-green); color: #fff; }
 .grid.seven button:nth-child(2) { background: var(--btn-blue); color: #fff; }
-.grid.seven button:nth-child(3) { background: var(--btn-brown); color: #fff; }
-.grid.seven button:nth-child(4) { background: var(--btn-orange); color: #fff; }
+.grid.seven button:nth-child(3) { background: var(--btn-orange); color: #fff; }
+.grid.seven button:nth-child(4) { background: var(--btn-brown); color: #fff; }
 .grid.seven button:nth-child(5) { background: var(--btn-teal); color: #fff; }
 .grid.seven button:nth-child(6) { background: var(--btn-gray); color: #fff; }
 .grid.seven button:nth-child(7) { background: var(--btn-red); color: #fff; }
 
+/* Splash Screen */
 #splash {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -178,7 +172,6 @@ button.warn {
   z-index: 2000;
   animation: splashfade 2s ease-in-out forwards;
 }
-
 @keyframes splashfade {
   0% { opacity: 1; }
   80% { opacity: 1; }
@@ -193,60 +186,59 @@ button.warn {
   left: 45%;
   width: 60px;
   height: 60px;
-  border: 6px solid #555;
+  border: 6px solid #ccc;
   border-top: 6px solid var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  z-index: 1000;
+}
+.spinner.active { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Modal Window */
+.modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 1500;
+  animation: fadein .3s;
 }
 
-.spinner.active {
-  display: block;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Popup & Modal */
-.popup, .modal .card {
+.card {
   background: #fff;
-  color: #000;
   padding: 1rem;
   border-radius: 8px;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
 }
 
+.p { padding: 1rem; }
+
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+/* Popups */
 .popup {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
   width: 90%;
   max-width: 420px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
   z-index: 1600;
-  animation: fadein 0.3s;
+  animation: fadein .3s;
 }
-
 .popup button {
-  margin-top: 0.8rem;
+  margin-top: .8rem;
   background: var(--btn-green);
   color: #fff;
-}
-
-.modal {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1500;
-}
-
-/* Batch cards */
-.batch-card.red {
-  border: 2px solid red;
 }
 
 /* Map */
@@ -255,8 +247,34 @@ button.warn {
   border-radius: 8px;
 }
 
-/* Fade & transitions */
-@keyframes fadein {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* Inputs */
+input[type="file"] { border: none; background: #fff; }
+input[type="checkbox"] { width: auto; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #d9f7d9;
+  color: #063;
+  padding: .6rem 1rem;
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  z-index: 2000;
+  font-weight: bold;
+}
+
+/* Red border highlight for dumped batches */
+.item.dumped,
+.card.dumped,
+.batch-empty {
+  border: 2px solid var(--btn-red) !important;
+  box-shadow: 0 0 6px rgba(255,0,0,.5);
+}
+
+/* Scroll Fix */
+body, html {
+  scroll-behavior: smooth;
 }
