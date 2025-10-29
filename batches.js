@@ -1,133 +1,51 @@
-/* === WeedTracker V60 Pilot — batches.js ===
-   Full batch builder module
-   Includes:
-   - Big popup UI (not alerts)
-   - Timestamp (date + time)
-   - Add multiple chemicals from inventory
-   - Auto total calculations
-   - Deduction from inventory
-   - Dump logic with reason + red border for zero remaining
-*/
+/* === WeedTracker V60 Pilot - batches.js === */
+/* Batch creation, linking, and chemical deduction logic */
 
-(function () {
+window.WeedBatches = (() => {
+  const BA = {};
+
   const $ = (s, r = document) => r.querySelector(s);
-  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const fmt = (n, d = 0) => (n == null || n === "") ? "–" : Number(n).toFixed(d);
-  const DB = window.WeedStorage.load();
 
-  // Utility — refresh & save
-  function saveDB() {
-    window.WeedStorage.save(DB);
-  }
-
-  // Render all batches
-  function renderBatches() {
-    const list = $("#batchList");
-    if (!list) return;
-    list.innerHTML = "";
-    DB.batches
-      .slice()
-      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-      .forEach(b => {
-        const div = document.createElement("div");
-        div.className = "item batch-card";
-        if (b.remaining <= 0) div.classList.add("red");
-        div.innerHTML = `
-          <b>${b.id}</b><br>
-          <small>${b.date || "—"} • ${b.time || "—"}<br>
-          Total: ${fmt(b.mix)} L • Remaining: ${fmt(b.remaining)} L</small>
-          <div class="row end">
-            <button class="pill" data-open="${b.id}">Open</button>
-          </div>`;
-        div.querySelector("[data-open]").addEventListener("click", () => openBatchPopup(b));
-        list.appendChild(div);
-      });
-  }
-
-  // Open the big batch creation popup
-  $("#newBatch")?.addEventListener("click", () => {
-    const modal = document.createElement("div");
-    modal.className = "modal";
-    const timestamp = new Date();
-    const date = timestamp.toISOString().split("T")[0];
-    const time = timestamp.toTimeString().slice(0, 5);
-
-    modal.innerHTML = `
-      <div class="card p">
-        <h3>Create Batch</h3>
-        <p><b>Date:</b> ${date} • <b>Time:</b> ${time}</p>
-        <label>Total Mix (L)</label>
-        <input type="number" id="batchTotal" placeholder="e.g. 200" />
-        <div id="chemLines"></div>
-        <button id="addChemBtn" class="pill">➕ Add Chemical</button>
-        <div class="row gap end" style="margin-top:1rem;">
-          <button id="createBatchBtn">Create Batch</button>
-          <button id="cancelBatchBtn" class="warn">Cancel</button>
+  /* ===== Create Batch ===== */
+  BA.newBatchPopup = (DB, saveDB) => {
+    const now = new Date();
+    const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const html = `
+      <div class="modal">
+        <div class="card p">
+          <h3>Create New Batch</h3>
+          <label><b>Date:</b></label>
+          <input type="date" id="nb_date" value="${now.toISOString().split("T")[0]}">
+          <label><b>Time:</b></label>
+          <input type="time" id="nb_time" value="${ts}">
+          <label><b>Total Mix (L):</b></label>
+          <input type="number" id="nb_mix" value="200">
+          <div id="chemArea"></div>
+          <button id="addChemBtn">➕ Add Chemical</button>
+          <div class="row gap end" style="margin-top:1rem;">
+            <button id="saveBatchBtn">Save Batch</button>
+            <button id="cancelBatchBtn" class="warn">Cancel</button>
+          </div>
         </div>
       </div>`;
 
-    document.body.appendChild(modal);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    document.body.appendChild(wrap.firstChild);
+    const modal = $(".modal");
 
-    $("#cancelBatchBtn").addEventListener("click", () => modal.remove());
-
-    // Add new chemical line
-    $("#addChemBtn").addEventListener("click", () => addChemicalLine($("#chemLines")));
-
-    // Create final batch
-    $("#createBatchBtn").addEventListener("click", () => {
-      const totalMix = Number($("#batchTotal").value) || 0;
-      if (!totalMix) return alert("Enter total mix litres.");
-      const chems = [];
-      $$("#chemLines .chem-line").forEach(line => {
-        const name = line.querySelector(".chemSelect").value;
-        const per100 = Number(line.querySelector(".chemPer100").value);
-        const unit = line.querySelector(".chemUnit").value;
-        const chemObj = DB.chems.find(c => c.name === name);
-        const totalUsed = (per100 / 100) * totalMix;
-
-        chems.push({ name, per100, unit, totalUsed });
-
-        // Deduct from inventory
-        if (chemObj) {
-          const containerVol = chemObj.containerSize || 1;
-          const totalAvailable = chemObj.containers * containerVol;
-          const remaining = Math.max(0, totalAvailable - totalUsed);
-          chemObj.containers = remaining / containerVol;
-        }
-      });
-
-      const id = "B" + Date.now();
-      const batch = {
-        id,
-        date,
-        time,
-        mix: totalMix,
-        remaining: totalMix,
-        used: 0,
-        chemicals: chems,
-        dumps: [],
-      };
-
-      DB.batches.push(batch);
-      saveDB();
-      modal.remove();
-      renderBatches();
-      alert("✅ Batch created successfully!");
-    });
-  });
-
-  function addChemicalLine(container) {
-    const div = document.createElement("div");
-    div.className = "chem-line";
-    const chemOptions = DB.chems
-      .map(c => `<option value="${c.name}">${c.name}</option>`)
-      .join("");
-    div.innerHTML = `
-      <div style="margin-top:.4rem;border:1px solid #ccc;padding:.5rem;border-radius:6px;">
+    const chemArea = $("#chemArea");
+    const addChemRow = () => {
+      const row = document.createElement("div");
+      row.className = "chemRow";
+      const chems = DB.chems.slice().sort((a, b) => a.name.localeCompare(b.name));
+      const opts = chems.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
+      row.innerHTML = `
         <label>Chemical</label>
-        <select class="chemSelect">${chemOptions}</select>
+        <select class="chemSelect"><option value="">Select</option>${opts}</select>
         <label>Amount per 100L</label>
-        <input type="number" class="chemPer100" placeholder="e.g. 2" />
+        <input type="number" class="chemAmount" placeholder="e.g. 2">
         <label>Unit</label>
         <select class="chemUnit">
           <option value="L">L</option>
@@ -135,70 +53,140 @@
           <option value="g">g</option>
           <option value="kg">kg</option>
         </select>
-      </div>`;
-    container.appendChild(div);
-  }
+        <div class="chemTotal dim">Total: –</div>
+        <hr>`;
+      chemArea.appendChild(row);
 
-  // Popup for viewing or editing batch
-  function openBatchPopup(batch) {
-    const modal = document.createElement("div");
-    modal.className = "modal";
-    const jobsLinked = DB.tasks.filter(t => t.batch === batch.id);
-    const jobList = jobsLinked.length
-      ? `<ul>${jobsLinked.map(j => `<li>${j.name}</li>`).join("")}</ul>`
+      const mixEl = $("#nb_mix");
+      const updateTotals = () => {
+        const mix = Number(mixEl.value) || 0;
+        const amt = Number(row.querySelector(".chemAmount").value) || 0;
+        const total = (mix / 100) * amt;
+        row.querySelector(".chemTotal").textContent = `Total: ${fmt(total)} ${row.querySelector(".chemUnit").value}`;
+      };
+      row.querySelector(".chemAmount").addEventListener("input", updateTotals);
+      row.querySelector(".chemUnit").addEventListener("change", updateTotals);
+      mixEl.addEventListener("input", updateTotals);
+    };
+    $("#addChemBtn").onclick = addChemRow;
+    addChemRow();
+
+    $("#cancelBatchBtn").onclick = () => modal.remove();
+    $("#saveBatchBtn").onclick = () => {
+      const id = "B" + Date.now();
+      const date = $("#nb_date").value;
+      const time = $("#nb_time").value;
+      const mix = Number($("#nb_mix").value) || 0;
+      const chems = [...chemArea.querySelectorAll(".chemRow")].map(r => {
+        const chem = r.querySelector(".chemSelect").value;
+        const amt = Number(r.querySelector(".chemAmount").value) || 0;
+        const unit = r.querySelector(".chemUnit").value;
+        const total = (mix / 100) * amt;
+        return { chem, amt, unit, total };
+      }).filter(c => c.chem);
+
+      const summary = chems.map(c => `${c.chem}: ${fmt(c.amt)}${c.unit}/100L (Total ${fmt(c.total)}${c.unit})`).join("<br>");
+      const batch = { id, date, time, mix, remaining: mix, used: 0, chemicals: summary, dumped: false };
+
+      DB.batches.push(batch);
+
+      // Deduct chemicals from inventory
+      chems.forEach(c => {
+        const inv = DB.chems.find(x => x.name === c.chem);
+        if (inv) {
+          const containerVol = inv.containerSize * inv.containers;
+          let totalUsed = 0;
+          if (c.unit === "L" && inv.containerUnit === "L") totalUsed = c.total;
+          if (c.unit === "mL" && inv.containerUnit === "L") totalUsed = c.total / 1000;
+          if (c.unit === "g" && inv.containerUnit === "kg") totalUsed = c.total / 1000;
+          if (c.unit === "kg" && inv.containerUnit === "kg") totalUsed = c.total;
+          const remainingVol = containerVol - totalUsed;
+          inv.containers = Math.max(0, remainingVol / inv.containerSize);
+        }
+      });
+
+      saveDB();
+      alert("Batch created successfully.");
+      modal.remove();
+    };
+  };
+
+  /* ===== Render Batches ===== */
+  BA.render = (DB, showPopup) => {
+    const list = document.getElementById("batchList");
+    if (!list) return;
+    list.innerHTML = "";
+    DB.batches
+      .slice()
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .forEach((b) => {
+        const div = document.createElement("div");
+        div.className = "item";
+        if (b.remaining <= 0) div.classList.add("batch-empty");
+        div.innerHTML = `
+          <b>${b.id}</b><br>
+          <small>${b.date || "—"} ${b.time || ""}</small><br>
+          <small>Total Mix: ${fmt(b.mix)} L | Remaining: ${fmt(b.remaining)} L</small>
+          <div class="row end"><button class="pill" data-open="${b.id}">Open</button></div>`;
+        div.querySelector("[data-open]").onclick = () => showPopup(b);
+        list.appendChild(div);
+      });
+  };
+
+  /* ===== Show Batch Popup ===== */
+  BA.showPopup = (DB, b, saveDB) => {
+    const jobs = DB.tasks.filter((t) => t.batch === b.id);
+    const jobsHtml = jobs.length
+      ? `<ul>${jobs.map((t) => `<li>${t.name}</li>`).join("")}</ul>`
       : "—";
-    const chemList = batch.chemicals
-      .map(c => `<li>${c.name}: ${c.per100} ${c.unit}/100L • Used ${fmt(c.totalUsed)} ${c.unit}</li>`)
-      .join("");
-    const dumps = (batch.dumps || [])
-      .map(d => `<li>${d.amount} L dumped (${d.reason})</li>`)
-      .join("");
 
-    modal.innerHTML = `
-      <div class="card p">
-        <h3>${batch.id}</h3>
-        <p><b>Date:</b> ${batch.date} • <b>Time:</b> ${batch.time}</p>
-        <p><b>Total Mix:</b> ${fmt(batch.mix)} L</p>
-        <p><b>Remaining:</b> ${fmt(batch.remaining)} L</p>
-        <p><b>Chemicals:</b></p>
-        <ul>${chemList}</ul>
-        <p><b>Linked Jobs:</b></p>${jobList}
-        <p><b>Dump History:</b></p>
-        <ul>${dumps || "—"}</ul>
-        <div class="row gap end" style="margin-top:1rem;">
-          <button id="editBatchBtn">Edit</button>
-          <button id="dumpBatchBtn">Dump</button>
-          <button id="closeBatchBtn" class="warn">Close</button>
+    const html = `
+      <div class="modal">
+        <div class="card p ${b.remaining <= 0 ? "dumped" : ""}">
+          <h3>${b.id}</h3>
+          <div><b>Date:</b> ${b.date || "–"} · <b>Time:</b> ${b.time || "–"}</div>
+          <div><b>Total Mix:</b> ${fmt(b.mix)} L</div>
+          <div><b>Remaining:</b> ${fmt(b.remaining)} L</div>
+          <div style="margin-top:.4rem;"><b>Chemicals:</b><br>${b.chemicals}</div>
+          <div style="margin-top:.4rem;"><b>Linked Jobs:</b><br>${jobsHtml}</div>
+          <div class="row gap end" style="margin-top:.8rem;">
+            <button class="pill" id="editBatchBtn">Edit</button>
+            <button class="pill" id="dumpBatchBtn">Dump</button>
+            <button class="pill warn" id="closeBatchBtn">Close</button>
+          </div>
         </div>
       </div>`;
 
-    document.body.appendChild(modal);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    document.body.appendChild(wrap.firstChild);
+    const modal = document.querySelector(".modal");
 
-    $("#closeBatchBtn").addEventListener("click", () => modal.remove());
+    modal.querySelector("#closeBatchBtn").onclick = () => modal.remove();
 
-    $("#dumpBatchBtn").addEventListener("click", () => {
-      const amt = Number(prompt("Dump amount (L):", "0")) || 0;
-      if (!amt) return;
-      const reason = prompt("Reason for dumping:", "Leftover / spill") || "Unspecified";
-      batch.remaining = Math.max(0, batch.remaining - amt);
-      batch.dumps = batch.dumps || [];
-      batch.dumps.push({ amount: amt, reason });
+    modal.querySelector("#editBatchBtn").onclick = () => {
+      const mix = Number(prompt("Total mix (L):", b.mix)) || b.mix;
+      const remain = Number(prompt("Remaining (L):", b.remaining)) || b.remaining;
+      const chems = prompt("Edit chemicals:", b.chemicals) || b.chemicals;
+      b.mix = mix;
+      b.remaining = remain;
+      b.chemicals = chems;
       saveDB();
       modal.remove();
-      renderBatches();
-      alert("Dump logged successfully.");
-    });
-
-    $("#editBatchBtn").addEventListener("click", () => {
-      const mix = Number(prompt("Total mix (L):", batch.mix)) || batch.mix;
-      batch.mix = mix;
-      batch.remaining = Math.max(0, batch.remaining);
-      saveDB();
-      modal.remove();
-      renderBatches();
       alert("Batch updated.");
-    });
-  }
+    };
 
-  document.addEventListener("DOMContentLoaded", renderBatches);
+    modal.querySelector("#dumpBatchBtn").onclick = () => {
+      const amt = Number(prompt("Amount to dump (L):", b.remaining)) || 0;
+      const reason = prompt("Reason for dumping:", "") || "No reason specified";
+      b.remaining = Math.max(0, (b.remaining || 0) - amt);
+      b.dumped = true;
+      b.dumpReason = reason;
+      saveDB();
+      modal.remove();
+      alert("Batch dumped.");
+    };
+  };
+
+  return BA;
 })();
