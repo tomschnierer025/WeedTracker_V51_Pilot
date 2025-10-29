@@ -1,26 +1,28 @@
-/* === WeedTracker V60 Pilot Styles === */
+/* === WeedTracker V60 Pilot - styles.css === */
+/* Restored dark charcoal layout with white input boxes & vivid section colors */
 
 :root {
-  --bg: #e6e6e6;
-  --text: #111;
-  --dim: #555;
-  --accent: #145c38;
-  --border: #bbb;
-  --btn-green: #228b22;
-  --btn-blue: #337ab7;
-  --btn-orange: #e68a00;
+  --bg-dark: #121212;
+  --text: #f5f5f5;
+  --dim: #aaa;
+  --accent: #22aa66;
+  --border: #333;
+
+  --btn-green: #2e8b57;
+  --btn-blue: #1976d2;
+  --btn-orange: #e67e22;
   --btn-brown: #8b4513;
   --btn-teal: #009688;
-  --btn-gray: #555;
+  --btn-gray: #444;
   --btn-red: #b30000;
 }
 
-/* Base layout */
+/* === General Layout === */
 html, body {
   margin: 0;
   padding: 0;
   font-family: "Segoe UI", Arial, sans-serif;
-  background: var(--bg);
+  background: var(--bg-dark);
   color: var(--text);
   height: 100%;
   overflow-x: hidden;
@@ -29,145 +31,132 @@ html, body {
 h2, h3 {
   text-align: center;
   color: var(--accent);
-  margin-bottom: .4rem;
+  margin: 0.8rem 0;
 }
 
 label {
   display: block;
   font-weight: 600;
-  margin-top: .5rem;
-  margin-bottom: .15rem;
+  margin-top: .6rem;
+  margin-bottom: .25rem;
+  color: var(--text);
 }
 
+/* === Inputs & Buttons === */
 input, select, textarea, button {
   font-size: 1rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: .4rem;
-  width: 100%;
   box-sizing: border-box;
+  width: 100%;
 }
 
-textarea {
-  resize: vertical;
+input, select, textarea {
+  background: #fff;
+  color: #000;
 }
+
+textarea { resize: vertical; }
 
 button {
   cursor: pointer;
-  background: #fff;
+  background: var(--btn-gray);
+  color: #fff;
   transition: background .3s, color .3s;
 }
 
 button:hover {
-  background: var(--accent);
-  color: #fff;
+  filter: brightness(1.1);
 }
 
-button.warn {
-  background: var(--btn-red);
-  color: #fff;
-}
-
+/* === Layout / Containers === */
 .screen {
   display: none;
   padding: 1rem;
 }
-
 .screen.active {
   display: block;
-  animation: fadein .4s;
+  animation: fadein .4s ease-in;
 }
 
+.dim { color: var(--dim); font-size: 0.9rem; }
+
+.list .item {
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: .6rem .8rem;
+  margin-bottom: .5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+
+.filters {
+  background: #1b1b1b;
+  padding: .7rem;
+  border-radius: 8px;
+  margin-bottom: .8rem;
+  box-shadow: inset 0 0 3px rgba(255,255,255,.1);
+}
+
+/* === Grid & Rows === */
 .grid {
   display: grid;
-  gap: .5rem;
+  gap: .6rem;
 }
-
-.grid.four {
-  grid-template-columns: repeat(4, 1fr);
-}
-
-.grid.seven {
-  grid-template-columns: repeat(1, 1fr);
-}
-
+.grid.seven { grid-template-columns: 1fr; }
 @media (min-width: 700px) {
-  .grid.seven {
-    grid-template-columns: repeat(3, 1fr);
-  }
+  .grid.seven { grid-template-columns: repeat(3, 1fr); }
 }
 
-.row {
-  display: flex;
-  align-items: center;
-}
+.row { display: flex; align-items: center; }
+.row.end { justify-content: flex-end; }
+.row.gap > * + * { margin-left: .6rem; }
 
-.row.end {
-  justify-content: flex-end;
-}
+/* === Home Buttons === */
+.grid.seven button:nth-child(1) { background: var(--btn-green); }
+.grid.seven button:nth-child(2) { background: var(--btn-blue); }
+.grid.seven button:nth-child(3) { background: var(--btn-brown); }
+.grid.seven button:nth-child(4) { background: var(--btn-orange); }
+.grid.seven button:nth-child(5) { background: var(--btn-teal); }
+.grid.seven button:nth-child(6) { background: var(--btn-gray); }
+.grid.seven button:nth-child(7) { background: var(--btn-red); }
 
-.row.gap > * + * {
-  margin-left: .5rem;
+button.pill {
+  padding: .3rem .8rem;
+  border-radius: 20px;
+  background: var(--btn-green);
+  border: none;
+  color: #fff;
+  font-size: 0.9rem;
 }
+button.pill.warn { background: var(--btn-red); }
 
-.dim {
-  font-size: .9rem;
-  color: var(--dim);
-}
-
-/* Lists */
-.list .item {
-  background: #fff;
-  border-radius: 6px;
-  padding: .5rem .7rem;
-  margin-bottom: .4rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,.15);
-}
-
-/* Filters */
-.filters {
-  background: #f0f0f0;
-  padding: .6rem;
-  border-radius: 8px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.1);
-  margin-bottom: .8rem;
-}
-
-/* Home Button */
+/* === Home Floating Button === */
 .home-btn {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: var(--accent);
-  color: #fff;
-  padding: .6rem;
+  top: 1rem;
+  right: 1rem;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  font-size: 1.3rem;
+  background: var(--btn-green);
   border: none;
-  font-size: 1rem;
-  font-weight: bold;
-  text-align: center;
-  z-index: 999;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.4);
+  z-index: 900;
 }
-.home-btn:hover { background: #0f4b2e; }
+.home-btn:hover { background: #249d66; }
 
-/* Home Buttons Color Layout */
-.grid.seven button:nth-child(1) { background: var(--btn-green); color: #fff; }
-.grid.seven button:nth-child(2) { background: var(--btn-blue); color: #fff; }
-.grid.seven button:nth-child(3) { background: var(--btn-orange); color: #fff; }
-.grid.seven button:nth-child(4) { background: var(--btn-brown); color: #fff; }
-.grid.seven button:nth-child(5) { background: var(--btn-teal); color: #fff; }
-.grid.seven button:nth-child(6) { background: var(--btn-gray); color: #fff; }
-.grid.seven button:nth-child(7) { background: var(--btn-red); color: #fff; }
-
-/* Splash Screen */
+/* === Splash Screen === */
 #splash {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--accent);
-  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--accent);
+  color: #fff;
   font-size: 1.8rem;
   z-index: 2000;
   animation: splashfade 2s ease-in-out forwards;
@@ -178,103 +167,65 @@ button.warn {
   100% { opacity: 0; visibility: hidden; }
 }
 
-/* Spinner */
+/* === Spinner Overlay === */
 .spinner {
   display: none;
   position: fixed;
   top: 45%;
-  left: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 60px;
   height: 60px;
-  border: 6px solid #ccc;
+  border: 6px solid #444;
   border-top: 6px solid var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  z-index: 1000;
+  z-index: 1500;
 }
 .spinner.active { display: block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Modal Window */
-.modal {
+/* === Popups & Modals === */
+.modal, .popup {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,.5);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1500;
+  background: rgba(0,0,0,.6);
+  z-index: 1600;
   animation: fadein .3s;
 }
 
 .card {
-  background: #fff;
+  background: #1e1e1e;
+  color: #fff;
   padding: 1rem;
   border-radius: 8px;
   width: 90%;
   max-width: 420px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  box-shadow: 0 3px 10px rgba(0,0,0,.4);
 }
 
-.p { padding: 1rem; }
-
-@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
-
-/* Popups */
-.popup {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: #fff;
-  border-radius: 8px;
-  padding: 1rem;
-  width: 90%;
-  max-width: 420px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.3);
-  z-index: 1600;
-  animation: fadein .3s;
-}
 .popup button {
-  margin-top: .8rem;
   background: var(--btn-green);
   color: #fff;
+  border: none;
+  padding: .5rem .9rem;
+  border-radius: 6px;
+  margin-top: .6rem;
 }
+.popup button.closePopup { background: var(--btn-red); }
 
-/* Map */
+.batch-empty { border: 2px solid var(--btn-red); }
+
+/* === Map === */
 #map {
   border: 1px solid var(--border);
   border-radius: 8px;
+  min-height: 60vh;
+  background: #222;
 }
 
-/* Inputs */
-input[type="file"] { border: none; background: #fff; }
-input[type="checkbox"] { width: auto; }
-
-/* Toast */
-.toast {
-  position: fixed;
-  bottom: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #d9f7d9;
-  color: #063;
-  padding: .6rem 1rem;
-  border-radius: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.25);
-  z-index: 2000;
-  font-weight: bold;
-}
-
-/* Red border highlight for dumped batches */
-.item.dumped,
-.card.dumped,
-.batch-empty {
-  border: 2px solid var(--btn-red) !important;
-  box-shadow: 0 0 6px rgba(255,0,0,.5);
-}
-
-/* Scroll Fix */
-body, html {
-  scroll-behavior: smooth;
-}
+/* === Animations === */
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
