@@ -1,57 +1,52 @@
-/* === WeedTracker V60 Pilot — settings.js ===
-   Settings / Data management panel:
-   - Save email for backup
-   - Export / Restore data
-   - Clear all data confirmation
-   - Syncs with WeedStorage.js
-*/
+/* === WeedTracker V60 Pilot - settings.js === */
+/* Handles settings, data management, export/import, email save, etc. */
 
-(function () {
-  const $ = (s, r=document)=>r.querySelector(s);
+window.WeedSettings = (() => {
+  const STG = {};
 
-  function bindSettings(){
-    const emailEl = $("#accountEmail");
+  const $ = (s) => document.querySelector(s);
+
+  STG.init = (DB, saveDB) => {
+    const emailInput = $("#accountEmail");
     const saveBtn = $("#saveAccount");
     const exportBtn = $("#exportBtn");
     const restoreBtn = $("#restoreBtn");
     const clearBtn = $("#clearBtn");
 
-    // --- Load saved email ---
-    const DB = window.WeedStorage.load();
-    if (emailEl && DB.accountEmail) emailEl.value = DB.accountEmail;
+    // Load saved email
+    const savedEmail = localStorage.getItem("weedtracker_user_email");
+    if (savedEmail) emailInput.value = savedEmail;
 
-    // --- Save email ---
-    saveBtn?.addEventListener("click", ()=>{
-      const val = (emailEl?.value||"").trim();
-      const db = window.WeedStorage.load();
-      db.accountEmail = val;
-      window.WeedStorage.save(db);
-      alert("Email saved: " + val);
-    });
+    // Save email
+    saveBtn.onclick = () => {
+      const email = emailInput.value.trim();
+      if (!email) return alert("Please enter an email first.");
+      localStorage.setItem("weedtracker_user_email", email);
+      alert("Email saved for backup reference.");
+    };
 
-    // --- Export ---
-    exportBtn?.addEventListener("click", ()=>{
-      const data = window.WeedStorage.load();
-      window.WeedStorage.export(data);
-    });
+    // Export data
+    exportBtn.onclick = () => {
+      const data = DB;
+      WeedStorage.export(data);
+    };
 
-    // --- Restore ---
-    restoreBtn?.addEventListener("click", ()=>{
-      window.WeedStorage.import((json)=>{
-        alert("Data imported successfully. Reloading…");
-        setTimeout(()=>location.reload(),800);
-      });
-    });
-
-    // --- Clear ---
-    clearBtn?.addEventListener("click", ()=>{
-      if (confirm("Are you sure you want to clear ALL WeedTracker data? This cannot be undone.")){
-        window.WeedStorage.clear();
+    // Restore from backup (local)
+    restoreBtn.onclick = () => {
+      const restored = WeedStorage.restore();
+      if (restored) {
+        Object.assign(DB, restored);
+        saveDB();
+        alert("Backup restored.");
+        location.reload();
       }
-    });
-  }
+    };
 
-  if (document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", bindSettings);
-  } else bindSettings();
+    // Clear data
+    clearBtn.onclick = () => {
+      WeedStorage.clear();
+    };
+  };
+
+  return STG;
 })();
