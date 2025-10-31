@@ -1,216 +1,172 @@
-/* === WeedTracker V60.4 Pilot - batches.js === */
-/* Complete batch creation, editing, dump, and linking system */
+START batches.js
+/* === WeedTracker V60 Pilot - batches.js === */
+/* Handles batch creation, chemical linking, and usage tracking */
 
-window.WeedBatches = (() => {
-  const BT = {};
+window.BatchManager = (() => {
+  const BM = {};
+  let appData = {};
+  let chemSelect, chemList, batchList, batchModal;
+  let currentBatch = null;
 
-  // ===== Create New Batch =====
-  BT.createBatchPopup = (chems, saveCallback) => {
-    const div = document.createElement("div");
-    div.className = "modal";
+  BM.init = (data, saveFn) => {
+    appData = data;
+    BM.save = saveFn;
+    batchList = document.getElementById("batchList");
+    batchModal = document.getElementById("batchModal");
 
-    const id = "B" + Date.now();
-    const date = new Date();
-    const dateStr = date.toISOString().split("T")[0];
-    const timeStr = date.toTimeString().slice(0, 5);
+    // Buttons
+    document.getElementById("newBatch").onclick = BM.newBatch;
+    document.getElementById("bm_addChem").onclick = BM.addChemical;
+    document.getElementById("bm_save").onclick = BM.saveBatch;
+    document.getElementById("bm_cancel").onclick = BM.closeModal;
 
-    let chemRowsHTML = "";
+    // Elements
+    chemSelect = document.getElementById("bm_chemSelect");
+    chemList = document.getElementById("bm_chemList");
 
-    const buildChemRow = (idx) => `
-      <div class="chem-row" data-idx="${idx}">
-        <select class="chem-name" style="width:100%">
-          <option value="">Select Chemical</option>
-          ${chems.map(c => `<option value="${c.name}">${c.name}</option>`).join("")}
-        </select>
-        <div class="row gap mt">
-          <input type="number" class="chem-rate" placeholder="Rate per 100L" />
-          <select class="chem-unit">
-            <option value="L">L</option>
-            <option value="mL">mL</option>
-            <option value="g">g</option>
-            <option value="kg">kg</option>
-          </select>
-          <button class="pill warn delChem">✖</button>
-        </div>
-      </div>
-    `;
+    BM.refreshChemSelect();
+    BM.renderList();
+  };
 
-    let idx = 0;
-    chemRowsHTML += buildChemRow(idx);
-
-    div.innerHTML = `
-      <div class="card p scrollable" style="max-width:480px;width:95%">
-        <h3>Create New Batch</h3>
-        <p><b>Batch ID:</b> ${id}</p>
-        <p><b>Date:</b> ${dateStr} · <b>Time:</b> ${timeStr}</p>
-
-        <label>Total Mix (L)</label>
-        <input type="number" id="bt_mix" placeholder="Enter total mix" />
-
-        <div id="chemContainer">${chemRowsHTML}</div>
-        <button id="addChemRow" class="pill mt">➕ Add Chemical</button>
-
-        <div class="row gap end mt-2">
-          <button id="bt_save" class="pill emph">Save Batch</button>
-          <button id="bt_cancel" class="pill warn">Cancel</button>
-        </div>
-      </div>`;
-
-    document.body.appendChild(div);
-
-    const container = div.querySelector("#chemContainer");
-    const addBtn = div.querySelector("#addChemRow");
-
-    addBtn.onclick = () => {
-      idx++;
-      const newRow = document.createElement("div");
-      newRow.innerHTML = buildChemRow(idx);
-      container.appendChild(newRow.firstChild);
-      refreshDelBtns();
+  // Create new batch
+  BM.newBatch = () => {
+    currentBatch = {
+      id: "B" + Date.now(),
+      date: new Date().toISOString().slice(0, 10),
+      time: new Date().toTimeString().slice(0, 5),
+      totalMix: 0,
+      remaining: 0,
+      chems: [],
+      dump: [],
     };
+    BM.fillForm();
+    BM.showModal("Create Batch");
+  };
 
-    const refreshDelBtns = () => {
-      container.querySelectorAll(".delChem").forEach(btn => {
-        btn.onclick = (e) => e.target.closest(".chem-row").remove();
-      });
-    };
-    refreshDelBtns();
+  BM.fillForm = () => {
+    document.getElementById("bm_id").value = currentBatch.id;
+    document.getElementById("bm_date").value = currentBatch.date;
+    document.getElementById("bm_time").value = currentBatch.time;
+    document.getElementById("bm_mix").value = currentBatch.totalMix || "";
+    document.getElementById("bm_remaining").value = currentBatch.remaining || "";
+    chemList.innerHTML = "";
+  };
 
-    div.querySelector("#bt_cancel").onclick = () => div.remove();
-    div.querySelector("#bt_save").onclick = () => {
-      const mix = Number(document.getElementById("bt_mix").value || 0);
-      if (!mix) return alert("Enter total mix.");
+  BM.showModal = (title) => {
+    document.getElementById("batchModalTitle").textContent = title;
+    batchModal.style.display = "flex";
+  };
 
-      const chemicals = [];
-      container.querySelectorAll(".chem-row").forEach(row => {
-        const name = row.querySelector(".chem-name").value;
-        const rate = parseFloat(row.querySelector(".chem-rate").value || 0);
-        const unit = row.querySelector(".chem-unit").value;
-        if (name && rate) chemicals.push({ name, rate, unit });
-      });
+  BM.closeModal = () => {
+    batchModal.style.display = "none";
+  };
 
-      if (!chemicals.length) return alert("Add at least one chemical.");
+  BM.refreshChemSelect = () => {
+    chemSelect.innerHTML = `<option value="">— Select —</option>`;
+    appData.chems.forEach((c) => {
+      const o = document.createElement("option");
+      o.value = c.name;
+      o.textContent = `${c.name} (${c.active})`;
+      chemSelect.appendChild(o);
+    });
+  };
 
-      const batch = {
-        id,
-        date: dateStr,
-        time: timeStr,
-        mix,
-        remaining: mix,
-        chemicals,
-        used: 0,
-        dumps: [],
+  BM.addChemical = () => {
+    const chem = chemSelect.value;
+    const per100 = parseFloat(document.getElementById("bm_per100").value);
+    const unit = document.getElementById("bm_unit").value;
+    const totalMix = parseFloat(document.getElementById("bm_mix").value || 0);
+    if (!chem || !per100 || !unit || !totalMix) return alert("Fill all chemical fields.");
+    const total = ((per100 / 100) * totalMix).toFixed(2);
+    const obj = { chem, per100, unit, total: parseFloat(total) };
+    currentBatch.chems.push(obj);
+    BM.updateChemList();
+  };
+
+  BM.updateChemList = () => {
+    chemList.innerHTML = "";
+    currentBatch.chems.forEach((c, i) => {
+      const div = document.createElement("div");
+      div.className = "card soft";
+      div.innerHTML = `
+        <b>${c.chem}</b> – ${c.per100}${c.unit}/100L → <span class="accent">${c.total}${c.unit}</span>
+        <button data-i="${i}" class="pill warn small">Remove</button>`;
+      div.querySelector("button").onclick = (e) => {
+        currentBatch.chems.splice(e.target.dataset.i, 1);
+        BM.updateChemList();
       };
-
-      saveCallback(batch);
-      div.remove();
-    };
+      chemList.appendChild(div);
+    });
   };
 
-  // ===== Show Existing Batch =====
-  BT.showBatchDetails = (batch, updateCallback) => {
-    const redBorder = batch.remaining <= 0 ? "border:2px solid red" : "";
-    const usedTotal = batch.used || 0;
-    const dumpList = (batch.dumps || [])
-      .map(d => `<li>${d.amount}L dumped - ${d.reason}</li>`)
+  BM.saveBatch = () => {
+    currentBatch.date = document.getElementById("bm_date").value;
+    currentBatch.time = document.getElementById("bm_time").value;
+    currentBatch.totalMix = parseFloat(document.getElementById("bm_mix").value || 0);
+    currentBatch.remaining = parseFloat(document.getElementById("bm_remaining").value || currentBatch.totalMix);
+    const dumpAmt = parseFloat(document.getElementById("bm_dumpAmt").value || 0);
+    const dumpReason = document.getElementById("bm_dumpReason").value;
+    if (dumpAmt > 0) {
+      currentBatch.dump.push({ amount: dumpAmt, reason: dumpReason });
+      currentBatch.remaining -= dumpAmt;
+      if (currentBatch.remaining < 0) currentBatch.remaining = 0;
+    }
+
+    const existing = appData.batches.findIndex((b) => b.id === currentBatch.id);
+    if (existing >= 0) appData.batches[existing] = currentBatch;
+    else appData.batches.push(currentBatch);
+
+    BM.save(appData);
+    BM.renderList();
+    BM.closeModal();
+  };
+
+  BM.renderList = () => {
+    batchList.innerHTML = "";
+    if (!appData.batches.length) {
+      batchList.innerHTML = "<div class='muted'>No batches recorded.</div>";
+      return;
+    }
+
+    appData.batches.forEach((b) => {
+      const div = document.createElement("div");
+      const ring = b.remaining <= 0 ? "style='border:2px solid red;'" : "";
+      div.className = "card soft";
+      div.innerHTML = `
+        <div ${ring}>
+          <b>${b.id}</b> — ${b.date} ${b.time}<br>
+          <small>Total Mix: ${b.totalMix}L | Remaining: ${b.remaining}L</small><br>
+          <button class="pill small" data-id="${b.id}">Open</button>
+        </div>`;
+      div.querySelector("button").onclick = () => BM.viewBatch(b.id);
+      batchList.appendChild(div);
+    });
+  };
+
+  BM.viewBatch = (id) => {
+    const b = appData.batches.find((x) => x.id === id);
+    if (!b) return;
+    const popup = document.createElement("div");
+    popup.className = "modal";
+    const dumps = b.dump.map((d) => `<li>${d.amount}L dumped — ${d.reason}</li>`).join("") || "<li>None</li>";
+    const chems = b.chems
+      .map((c) => `<li>${c.chem}: ${c.per100}${c.unit}/100L → ${c.total}${c.unit}</li>`)
       .join("");
-
-    const html = `
-      <div class="card p scrollable" style="max-width:480px;width:95%;${redBorder}">
-        <h3>${batch.id}</h3>
-        <p><b>Date:</b> ${batch.date} ${batch.time || ""}</p>
-        <p><b>Total Mix:</b> ${batch.mix}L<br>
-        <b>Remaining:</b> ${batch.remaining}L<br>
-        <b>Used:</b> ${usedTotal}L</p>
-
-        <h4>Chemicals Used</h4>
-        <ul>${batch.chemicals
-          .map(c => `<li>${c.name} – ${c.rate}${c.unit}/100L</li>`)
-          .join("")}</ul>
-
-        <h4>Dumped Mix</h4>
-        <ul>${dumpList || "—"}</ul>
-
-        <div class="row gap end mt-2">
-          <button class="pill" id="dumpBtn">Dump</button>
-          <button class="pill" id="editBtn">Edit</button>
-          <button class="pill warn" id="closeBtn">Close</button>
+    popup.innerHTML = `
+      <div class="card p">
+        <h3>${b.id}</h3>
+        <p>Date: ${b.date} ${b.time}</p>
+        <p>Total Mix: ${b.totalMix}L | Remaining: ${b.remaining}L</p>
+        <h4>Chemicals</h4><ul>${chems}</ul>
+        <h4>Dump Log</h4><ul>${dumps}</ul>
+        <div class="row end gap mt">
+          <button class="pill warn" id="closeBatchPopup">Close</button>
         </div>
       </div>`;
-
-    const div = document.createElement("div");
-    div.className = "modal";
-    div.innerHTML = html;
-    document.body.appendChild(div);
-
-    div.querySelector("#closeBtn").onclick = () => div.remove();
-
-    div.querySelector("#editBtn").onclick = () => {
-      div.remove();
-      BT.editBatch(batch, updateCallback);
-    };
-
-    div.querySelector("#dumpBtn").onclick = () => {
-      const amount = Number(prompt("Enter amount to dump (L):", "0"));
-      if (!amount || amount <= 0) return;
-      const reason = prompt("Reason for dump:", "Contamination");
-      batch.remaining = Math.max(0, batch.remaining - amount);
-      batch.dumps = batch.dumps || [];
-      batch.dumps.push({ amount, reason, date: new Date().toISOString() });
-      updateCallback(batch);
-      div.remove();
-    };
+    document.body.appendChild(popup);
+    document.getElementById("closeBatchPopup").onclick = () => popup.remove();
   };
 
-  // ===== Edit Batch =====
-  BT.editBatch = (batch, saveCallback) => {
-    const div = document.createElement("div");
-    div.className = "modal";
-
-    const buildRow = (c, i) => `
-      <div class="chem-row" data-idx="${i}">
-        <input value="${c.name}" class="chem-name" />
-        <div class="row gap mt">
-          <input type="number" value="${c.rate}" class="chem-rate" />
-          <select class="chem-unit">
-            <option ${c.unit === "L" ? "selected" : ""}>L</option>
-            <option ${c.unit === "mL" ? "selected" : ""}>mL</option>
-            <option ${c.unit === "g" ? "selected" : ""}>g</option>
-            <option ${c.unit === "kg" ? "selected" : ""}>kg</option>
-          </select>
-        </div>
-      </div>`;
-
-    div.innerHTML = `
-      <div class="card p scrollable" style="max-width:480px;width:95%">
-        <h3>Edit Batch ${batch.id}</h3>
-        <label>Total Mix (L)</label>
-        <input id="edit_mix" type="number" value="${batch.mix}" />
-        <label>Remaining (L)</label>
-        <input id="edit_remaining" type="number" value="${batch.remaining}" />
-        <div id="editChems">${batch.chemicals.map(buildRow).join("")}</div>
-        <div class="row gap end mt-2">
-          <button id="editSave" class="pill emph">Save</button>
-          <button id="editCancel" class="pill warn">Cancel</button>
-        </div>
-      </div>`;
-    document.body.appendChild(div);
-
-    div.querySelector("#editCancel").onclick = () => div.remove();
-    div.querySelector("#editSave").onclick = () => {
-      batch.mix = Number(document.getElementById("edit_mix").value);
-      batch.remaining = Number(document.getElementById("edit_remaining").value);
-      batch.chemicals = [];
-      div.querySelectorAll(".chem-row").forEach(row => {
-        const name = row.querySelector(".chem-name").value;
-        const rate = parseFloat(row.querySelector(".chem-rate").value || 0);
-        const unit = row.querySelector(".chem-unit").value;
-        if (name) batch.chemicals.push({ name, rate, unit });
-      });
-      saveCallback(batch);
-      div.remove();
-    };
-  };
-
-  return BT;
+  return BM;
 })();
+END batches.js
