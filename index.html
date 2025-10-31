@@ -20,31 +20,38 @@
   <div class="grid home-buttons">
 
     <button class="tile green" data-target="createTask">
-      <span class="icon">🧾</span><span>Create Task</span>
+      <img src="icons/task.png" class="icon-img" alt="Create Task">
+      <span>Create Task</span>
     </button>
 
     <button class="tile blue" data-target="records">
-      <span class="icon">📚</span><span>Records</span>
+      <img src="icons/records.png" class="icon-img" alt="Records">
+      <span>Records</span>
     </button>
 
     <button class="tile orange" data-target="batches">
-      <span class="icon">🧪</span><span>Batches</span>
+      <img src="icons/batches.png" class="icon-img" alt="Batches">
+      <span>Batches</span>
     </button>
 
     <button class="tile teal" data-target="inventory">
-      <span class="icon">🧴</span><span>Chemical Inventory</span>
+      <img src="icons/inventory.png" class="icon-img" alt="Chemical Inventory">
+      <span>Chemical Inventory</span>
     </button>
 
     <button class="tile purple" data-target="procurement">
-      <span class="icon">🛒</span><span>Procurement</span>
+      <img src="icons/procurement.png" class="icon-img" alt="Procurement">
+      <span>Procurement</span>
     </button>
 
-    <button class="tile yellow" data-target="mapping">
-      <span class="icon">🗺️</span><span>Mapping</span>
+    <button class="tile grey" data-target="mapping">
+      <img src="icons/map.png" class="icon-img" alt="Mapping">
+      <span>Mapping</span>
     </button>
 
-    <button class="tile grey" data-target="settings">
-      <span class="icon">⚙️</span><span>Settings / Clear Data</span>
+    <button class="tile red" data-target="settings">
+      <img src="icons/settings.png" class="icon-img" alt="Settings">
+      <span>Settings / Clear Data</span>
     </button>
 
   </div>
@@ -52,7 +59,7 @@
 
 <!-- CREATE TASK ------------------------------------------------------->
 <section id="createTask" class="screen">
-  <button class="home-btn">🏠 Home</button>
+  <button class="home-btn"><img src="icons/home.png" class="icon-img" alt="Home"></button>
   <h3>Create Task</h3>
   <form id="taskForm" class="grid gap">
     <label>Job Type
@@ -116,74 +123,53 @@
 
 <!-- RECORDS ----------------------------------------------------------->
 <section id="records" class="screen">
-  <button class="home-btn">🏠 Home</button>
+  <button class="home-btn"><img src="icons/home.png" class="icon-img" alt="Home"></button>
   <h3>Records</h3>
-  <div class="filters"></div>
   <div id="recordsList" class="list"></div>
 </section>
 
 <!-- BATCHES ----------------------------------------------------------->
 <section id="batches" class="screen">
-  <button class="home-btn">🏠 Home</button>
+  <button class="home-btn"><img src="icons/home.png" class="icon-img" alt="Home"></button>
   <h3>Batches</h3>
-  <div class="filters"></div>
   <div class="row end"><button id="newBatch">➕ New Batch</button></div>
   <div id="batchList" class="list"></div>
 </section>
 
 <!-- INVENTORY --------------------------------------------------------->
 <section id="inventory" class="screen">
-  <button class="home-btn">🏠 Home</button>
+  <button class="home-btn"><img src="icons/home.png" class="icon-img" alt="Home"></button>
   <h3>Chemical Inventory</h3>
-  <div class="filters"></div>
-  <div class="row end"><button id="addChem">➕ Add Chemical</button></div>
+  <button id="addChem">➕ Add Chemical</button>
   <div id="chemList" class="list"></div>
 </section>
 
 <!-- PROCUREMENT ------------------------------------------------------->
 <section id="procurement" class="screen">
-  <button class="home-btn">🏠 Home</button>
+  <button class="home-btn"><img src="icons/home.png" class="icon-img" alt="Home"></button>
   <h3>Procurement List</h3>
   <ul id="procList" class="list"></ul>
 </section>
 
 <!-- MAPPING ----------------------------------------------------------->
 <section id="mapping" class="screen">
-  <button class="home-btn">🏠 Home</button>
+  <button class="home-btn"><img src="icons/home.png" class="icon-img" alt="Home"></button>
   <h3>Mapping</h3>
-  <div class="filters"></div>
   <div id="map" style="height:70vh;border-radius:10px;margin-top:.5rem"></div>
 </section>
 
 <!-- SETTINGS ---------------------------------------------------------->
 <section id="settings" class="screen">
-  <button class="home-btn">🏠 Home</button>
+  <button class="home-btn"><img src="icons/home.png" class="icon-img" alt="Home"></button>
   <h3>Settings / Backup & Clear</h3>
   <div class="grid gap">
     <label>Email <input id="accountEmail" placeholder="Optional"></label>
     <button id="saveAccount">Save Account</button>
     <button id="exportBtn">Export Data 📤</button>
-    <button id="restoreBtn">Restore Last Backup 📥</button>
+    <button id="restoreBtn">Restore Backup 📥</button>
     <button id="clearBtn" class="warn">🗑 Clear All Data</button>
   </div>
 </section>
-
-<!-- CHEM EDITOR SHEET ------------------------------------------------->
-<div id="chemEditSheet" class="sheet">
-  <div class="card p">
-    <h3>Edit Chemical</h3>
-    <label>Name <input id="ce_name"></label>
-    <label>Active <input id="ce_active"></label>
-    <label>Size <input type="number" id="ce_size"></label>
-    <label>Unit <input id="ce_unit"></label>
-    <label>Count <input type="number" id="ce_count"></label>
-    <label>Threshold <input type="number" id="ce_threshold"></label>
-    <div class="row gap end">
-      <button id="ce_save">Save</button>
-      <button id="ce_cancel" class="warn">Cancel</button>
-    </div>
-  </div>
-</div>
 
 <script src="apps.js"></script>
 </body>
