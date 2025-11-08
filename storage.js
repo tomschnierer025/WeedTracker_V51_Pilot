@@ -1,47 +1,69 @@
-START storage.js
-/* === WeedTracker V60 Pilot - storage.js === */
-/* Local storage handling, saving, restoring, export/import logic */
+/* === WeedTracker V60 Pilot — storage.js ===
+ * Handles saving, loading, exporting, importing, and clearing local data.
+ * Matches with full apps.js build.
+ */
 
 window.WeedStorage = (() => {
   const ST = {};
-  const KEY = "weedtracker_data_v60";
+  const KEY = "weedtracker_data_v60_full";
+  const BACKUP_KEY = "weedtracker_backups_v60";
+  const MAX_BACKUPS = 5;
 
-  // Load data safely
   ST.load = () => {
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) return { tasks: [], batches: [], chems: [], procurement: [] };
-      const parsed = JSON.parse(raw);
-      if (!parsed.tasks) parsed.tasks = [];
-      if (!parsed.batches) parsed.batches = [];
-      if (!parsed.chems) parsed.chems = [];
-      if (!parsed.procurement) parsed.procurement = [];
-      return parsed;
-    } catch (err) {
-      console.warn("Storage load error", err);
-      return { tasks: [], batches: [], chems: [], procurement: [] };
+      if (!raw) return { tasks: [], batches: [], chems: [], procurement: [], weeds: [] };
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn("Load error", e);
+      return { tasks: [], batches: [], chems: [], procurement: [], weeds: [] };
     }
   };
 
-  // Save data safely
-  ST.save = (data) => {
+  ST.save = (data, withBackup = true) => {
     try {
       localStorage.setItem(KEY, JSON.stringify(data));
-      console.log("✅ WeedTracker data saved");
-    } catch (err) {
-      alert("Save error: " + err.message);
+      if (withBackup) {
+        const backups = JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
+        backups.unshift({ ts: new Date().toISOString(), data });
+        while (backups.length > MAX_BACKUPS) backups.pop();
+        localStorage.setItem(BACKUP_KEY, JSON.stringify(backups));
+      }
+      console.log("Data saved successfully.");
+    } catch (e) {
+      alert("Save error: " + e);
     }
   };
 
-  // Clear all
+  ST.backups = () => {
+    try {
+      return JSON.parse(localStorage.getItem(BACKUP_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  };
+
+  ST.restore = (index = 0) => {
+    try {
+      const backups = ST.backups();
+      if (!backups[index]) return null;
+      const data = backups[index].data;
+      localStorage.setItem(KEY, JSON.stringify(data));
+      alert("Backup restored.");
+      return data;
+    } catch (e) {
+      alert("Restore failed: " + e);
+      return null;
+    }
+  };
+
   ST.clear = () => {
-    if (!confirm("Are you sure you want to clear ALL WeedTracker data?")) return;
+    if (!confirm("Clear all WeedTracker data?")) return;
     localStorage.removeItem(KEY);
-    alert("All WeedTracker data cleared.");
+    alert("All data cleared.");
     location.reload();
   };
 
-  // Export JSON backup
   ST.export = (data) => {
     try {
       const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -50,25 +72,19 @@ window.WeedStorage = (() => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `weedtracker_backup_${new Date()
-        .toISOString()
-        .slice(0, 10)}.json`;
-      document.body.appendChild(a);
+      a.download = "weedtracker_backup.json";
       a.click();
-      document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      alert("Backup exported successfully.");
-    } catch (err) {
-      alert("Export failed: " + err.message);
+    } catch (e) {
+      alert("Export failed: " + e);
     }
   };
 
-  // Import JSON backup
   ST.import = (callback) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json";
-    input.onchange = (e) => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "application/json";
+    inp.onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
@@ -76,32 +92,16 @@ window.WeedStorage = (() => {
         try {
           const json = JSON.parse(r.target.result);
           localStorage.setItem(KEY, JSON.stringify(json));
-          alert("Data restored successfully. App will now reload.");
+          alert("Data restored successfully.");
           if (callback) callback(json);
-          setTimeout(() => location.reload(), 500);
         } catch (err) {
-          alert("Import failed: " + err.message);
+          alert("Import failed: " + err);
         }
       };
       reader.readAsText(file);
     };
-    input.click();
-  };
-
-  // Auto-backup once daily
-  ST.autoBackup = (data) => {
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      const backupKey = `${KEY}_backup_${today}`;
-      if (!localStorage.getItem(backupKey)) {
-        localStorage.setItem(backupKey, JSON.stringify(data));
-        console.log("📦 Auto-backup created:", backupKey);
-      }
-    } catch (err) {
-      console.warn("Auto-backup failed", err);
-    }
+    inp.click();
   };
 
   return ST;
 })();
-END storage.js
