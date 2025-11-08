@@ -1,39 +1,46 @@
-START settings.js
-/* === WeedTracker V60 Pilot - settings.js === */
-/* Settings, data management, and account preferences */
+/* === WeedTracker V60 Pilot — settings.js ===
+ * Handles user account preferences, data export, import, and clearing.
+ * Integrates with WeedStorage module for full persistence management.
+ */
 
-window.SettingsManager = (() => {
-  const SM = {};
-  let dataRef = {};
-  let saveFn;
+window.WeedSettings = (() => {
+  const S = {};
 
-  SM.init = (data, saveFunction) => {
-    dataRef = data;
-    saveFn = saveFunction;
-
-    // Buttons
-    document.getElementById("saveAccount").onclick = SM.saveAccount;
-    document.getElementById("exportBtn").onclick = () => WeedStorage.export(dataRef);
-    document.getElementById("restoreBtn").onclick = () => WeedStorage.import(SM.refreshAfterRestore);
-    document.getElementById("clearBtn").onclick = () => WeedStorage.clear();
-
-    // Prefill if email exists
+  S.init = (DB, saveDB, renderAll) => {
     const emailInput = document.getElementById("accountEmail");
-    if (dataRef.accountEmail) emailInput.value = dataRef.accountEmail;
+    const saveBtn = document.getElementById("saveAccount");
+    const exportBtn = document.getElementById("exportBtn");
+    const restoreBtn = document.getElementById("restoreBtn");
+    const clearBtn = document.getElementById("clearBtn");
+
+    // Load stored email
+    emailInput.value = DB.accountEmail || "";
+
+    saveBtn.onclick = () => {
+      DB.accountEmail = emailInput.value.trim();
+      saveDB();
+      alert("Email saved.");
+    };
+
+    exportBtn.onclick = () => {
+      WeedStorage.export(DB);
+    };
+
+    restoreBtn.onclick = () => {
+      WeedStorage.import((newDB) => {
+        Object.assign(DB, newDB);
+        saveDB();
+        renderAll();
+      });
+    };
+
+    clearBtn.onclick = () => {
+      if (!confirm("Are you sure you want to clear ALL local data?")) return;
+      localStorage.removeItem("weedtracker_data_v60");
+      alert("All data cleared.");
+      location.reload();
+    };
   };
 
-  SM.saveAccount = () => {
-    const email = document.getElementById("accountEmail").value.trim();
-    dataRef.accountEmail = email;
-    saveFn(dataRef);
-    alert("✅ Email saved successfully.");
-  };
-
-  SM.refreshAfterRestore = () => {
-    alert("Data restored successfully. Reloading...");
-    location.reload();
-  };
-
-  return SM;
+  return S;
 })();
-END settings.js
