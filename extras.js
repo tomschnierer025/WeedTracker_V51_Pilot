@@ -1,6 +1,7 @@
-START extras.js
-/* === WeedTracker V60 Pilot - extras.js === */
-/* Utilities: weather fetch, navigation, filters, helpers */
+/* === WeedTracker V60 Pilot — extras.js ===
+ * General helper functions: weather, navigation, popups, filters, etc.
+ * Matches full apps.js version.
+ */
 
 window.WeedExtras = (() => {
   const EX = {};
@@ -8,28 +9,25 @@ window.WeedExtras = (() => {
   /* ===== WEATHER ===== */
   EX.getWeather = async () => {
     try {
-      const pos = await new Promise((res, rej) => {
-        if (!navigator.geolocation) rej("no geo");
-        navigator.geolocation.getCurrentPosition(res, rej);
-      });
+      if (!navigator.geolocation) throw new Error("No geolocation support");
+      const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej));
       const { latitude, longitude } = pos.coords;
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m`;
       const r = await fetch(url);
       const j = await r.json();
-      const w = j.current_weather;
-      document.getElementById("temp").value = w.temperature;
-      document.getElementById("wind").value = w.windspeed;
-      document.getElementById("windDir").value = w.winddirection + "°";
-      document.getElementById("humidity").value = w.relative_humidity || 50;
-      document.getElementById("wxUpdated").textContent =
-        "Weather updated: " + new Date().toLocaleTimeString();
+      const c = j.current || {};
+      document.getElementById("temp").value = c.temperature_2m ?? "";
+      document.getElementById("wind").value = c.wind_speed_10m ?? "";
+      document.getElementById("windDir").value = (c.wind_direction_10m ?? "") + (c.wind_direction_10m != null ? "°" : "");
+      document.getElementById("humidity").value = c.relative_humidity_2m ?? "";
+      document.getElementById("wxUpdated").textContent = "Weather updated: " + new Date().toLocaleTimeString();
     } catch (e) {
       console.warn("Weather fetch failed", e);
       alert("Unable to fetch weather automatically.");
     }
   };
 
-  /* ===== MAP NAVIGATION ===== */
+  /* ===== APPLE MAPS NAVIGATION ===== */
   EX.navigateAppleMaps = (lat, lon) => {
     if (!lat || !lon) return alert("No coordinates found.");
     const url = `maps://?daddr=${lat},${lon}`;
@@ -38,11 +36,10 @@ window.WeedExtras = (() => {
 
   /* ===== FILTER RESET ===== */
   EX.resetFilters = (group) => {
-    document.querySelectorAll(`#${group} input[type=text], #${group} input[type=date]`)
-      .forEach((i) => (i.value = ""));
     document
-      .querySelectorAll(`#${group} input[type=checkbox]`)
-      .forEach((i) => (i.checked = false));
+      .querySelectorAll(`#${group} input[type=text], #${group} input[type=date]`)
+      .forEach((i) => (i.value = ""));
+    document.querySelectorAll(`#${group} input[type=checkbox]`).forEach((i) => (i.checked = false));
   };
 
   /* ===== DATE FORMATTING ===== */
@@ -65,41 +62,25 @@ window.WeedExtras = (() => {
   /* ===== POPUPS ===== */
   EX.createPopup = (title, html) => {
     const div = document.createElement("div");
-    div.className = "modal";
-    div.innerHTML = `
-      <div class="card p">
-        <h3>${title}</h3>
-        <div>${html}</div>
-        <div class="row end gap mt">
-          <button class="pill warn" id="closePopup">Close</button>
-        </div>
-      </div>`;
+    div.className = "popup";
+    div.innerHTML = `<h3>${title}</h3><div>${html}</div><button class="closePopup">Close</button>`;
     document.body.appendChild(div);
-    document.getElementById("closePopup").onclick = () => div.remove();
+    div.querySelector(".closePopup").onclick = () => div.remove();
   };
 
   EX.createRecordPopup = (rec) => {
     const html = `
       <p><b>Type:</b> ${rec.type}<br>
       <b>Weed:</b> ${rec.weed}<br>
-      <b>Batch:</b> ${rec.batch}<br>
       <b>Date:</b> ${EX.formatDateAU(rec.date)}<br>
-      <b>Weather:</b> ${rec.temp}°C, ${rec.wind} km/h ${rec.windDir}, ${rec.humidity}%<br>
       <b>Status:</b> ${rec.status}<br>
       <b>Notes:</b> ${rec.notes || ""}</p>
-      <button class="pill blue navBtn">Navigate</button>`;
+      <button class="navBtn">Navigate</button>`;
     const div = document.createElement("div");
-    div.className = "modal";
-    div.innerHTML = `
-      <div class="card p">
-        <h3>${rec.name}</h3>
-        ${html}
-        <div class="row end gap mt">
-          <button class="pill warn" id="closeRecPopup">Close</button>
-        </div>
-      </div>`;
+    div.className = "popup";
+    div.innerHTML = `<h3>${rec.name}</h3>${html}<button class="closePopup">Close</button>`;
     document.body.appendChild(div);
-    document.getElementById("closeRecPopup").onclick = () => div.remove();
+    div.querySelector(".closePopup").onclick = () => div.remove();
     const navBtn = div.querySelector(".navBtn");
     if (navBtn) {
       navBtn.onclick = () => {
@@ -116,11 +97,11 @@ window.WeedExtras = (() => {
       <p><b>Date:</b> ${EX.formatDateAU(batch.date)}<br>
       <b>Total Mix:</b> ${batch.mix} L<br>
       <b>Remaining:</b> ${batch.remaining || batch.mix} L<br>
-      <b>Chemicals:</b> ${batch.chemicals}</p>`;
+      <b>Chemicals:</b> ${batch.chemicals.map((c) => c.name).join(", ")}</p>`;
     EX.createPopup(batch.id, html);
   };
 
-  /* ===== MAP PINS ===== */
+  /* ===== MAP PIN POPUPS ===== */
   EX.createMapPinPopup = (map, data) => {
     if (!map || !Array.isArray(data)) return;
     data.forEach((rec) => {
@@ -129,7 +110,7 @@ window.WeedExtras = (() => {
       const marker = L.marker([lat, lon]).addTo(map);
       marker.bindPopup(
         `<b>${rec.name}</b><br>${rec.type} - ${EX.formatDateAU(rec.date)}<br>
-        <button class="pill blue pinNav" data-lat="${lat}" data-lon="${lon}">Navigate</button>`
+        <button class="pinNav" data-lat="${lat}" data-lon="${lon}">Navigate</button>`
       );
     });
     map.on("popupopen", (e) => {
@@ -144,4 +125,3 @@ window.WeedExtras = (() => {
 
   return EX;
 })();
-END extras.js
