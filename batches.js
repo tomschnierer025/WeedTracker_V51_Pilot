@@ -1,172 +1,163 @@
-START batches.js
-/* === WeedTracker V60 Pilot - batches.js === */
-/* Handles batch creation, chemical linking, and usage tracking */
+/* === WeedTracker V60 Pilot — batches.js ===
+ * Dedicated batch management logic:
+ * - Multi-chemical batches
+ * - Auto timestamps
+ * - Inventory deduction
+ * - Dump & edit with reason tracking
+ * - Red border highlight for empty batches
+ */
 
-window.BatchManager = (() => {
-  const BM = {};
-  let appData = {};
-  let chemSelect, chemList, batchList, batchModal;
-  let currentBatch = null;
+window.WeedBatches = (() => {
+  const B = {};
+  const fmt = (n, d = 0) => (n == null || n === "") ? "–" : Number(n).toFixed(d);
 
-  BM.init = (data, saveFn) => {
-    appData = data;
-    BM.save = saveFn;
-    batchList = document.getElementById("batchList");
-    batchModal = document.getElementById("batchModal");
+  /* ===== Create new batch ===== */
+  B.createBatch = (DB, saveDB, renderBatches, populateBatchSelect) => {
+    const id = "B" + Date.now();
+    const date = new Date();
+    const dateStr = date.toISOString().split("T")[0];
+    const timeStr = date.toTimeString().slice(0, 5);
 
-    // Buttons
-    document.getElementById("newBatch").onclick = BM.newBatch;
-    document.getElementById("bm_addChem").onclick = BM.addChemical;
-    document.getElementById("bm_save").onclick = BM.saveBatch;
-    document.getElementById("bm_cancel").onclick = BM.closeModal;
+    const mix = Number(prompt("Total mix (L):", "200")) || 0;
+    if (!mix) return alert("Invalid total mix.");
 
-    // Elements
-    chemSelect = document.getElementById("bm_chemSelect");
-    chemList = document.getElementById("bm_chemList");
+    const chemicals = [];
+    let addMore = true;
 
-    BM.refreshChemSelect();
-    BM.renderList();
-  };
+    while (addMore) {
+      const chemNames = DB.chems.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
+      const choice = prompt(`Select chemical:\n${chemNames}\nEnter number or cancel`, "1");
+      if (!choice) break;
+      const chem = DB.chems[Number(choice) - 1];
+      if (!chem) break;
 
-  // Create new batch
-  BM.newBatch = () => {
-    currentBatch = {
-      id: "B" + Date.now(),
-      date: new Date().toISOString().slice(0, 10),
-      time: new Date().toTimeString().slice(0, 5),
-      totalMix: 0,
-      remaining: 0,
-      chems: [],
-      dump: [],
+      const rate = Number(prompt(`Rate for ${chem.name} per 100L:`, "2")) || 0;
+      const unit = prompt("Unit (L, mL, g, kg):", chem.containerUnit || "L");
+      const totalUsed = (rate / 100) * mix;
+      chemicals.push({ name: chem.name, rate, unit, totalUsed });
+
+      // Deduct from inventory
+      const chemItem = DB.chems.find((c) => c.name === chem.name);
+      if (chemItem) {
+        const perContainer = chemItem.containerSize || 1;
+        const usedContainers = totalUsed / perContainer;
+        chemItem.containers = Math.max(0, (chemItem.containers || 0) - usedContainers);
+      }
+
+      addMore = confirm("Add another chemical?");
+    }
+
+    const obj = {
+      id,
+      date: dateStr,
+      time: timeStr,
+      mix,
+      remaining: mix,
+      used: 0,
+      chemicals,
+      dumps: [],
+      color: "#fff",
     };
-    BM.fillForm();
-    BM.showModal("Create Batch");
+
+    DB.batches.push(obj);
+    saveDB();
+    renderBatches();
+    populateBatchSelect();
+    alert("Batch created successfully!");
   };
 
-  BM.fillForm = () => {
-    document.getElementById("bm_id").value = currentBatch.id;
-    document.getElementById("bm_date").value = currentBatch.date;
-    document.getElementById("bm_time").value = currentBatch.time;
-    document.getElementById("bm_mix").value = currentBatch.totalMix || "";
-    document.getElementById("bm_remaining").value = currentBatch.remaining || "";
-    chemList.innerHTML = "";
+  /* ===== Render all batches ===== */
+  B.renderBatches = (DB, showBatchPopup) => {
+    const list = document.getElementById("batchList");
+    if (!list) return;
+    list.innerHTML = "";
+
+    DB.batches
+      .slice()
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .forEach((b) => {
+        const div = document.createElement("div");
+        const empty = b.remaining <= 0 ? "style='border:2px solid red;'" : "";
+        div.className = "item";
+        div.innerHTML = `
+          <div ${empty}>
+            <b>${b.id}</b><br>
+            <small>${b.date} ${b.time}</small><br>
+            <small>Total Mix: ${fmt(b.mix)} L</small><br>
+            <small>Remaining: ${fmt(b.remaining)} L</small><br>
+            <button class="pill" data-open="${b.id}">Open</button>
+          </div>`;
+        div.querySelector("[data-open]").addEventListener("click", () => showBatchPopup(b));
+        list.appendChild(div);
+      });
   };
 
-  BM.showModal = (title) => {
-    document.getElementById("batchModalTitle").textContent = title;
-    batchModal.style.display = "flex";
-  };
-
-  BM.closeModal = () => {
-    batchModal.style.display = "none";
-  };
-
-  BM.refreshChemSelect = () => {
-    chemSelect.innerHTML = `<option value="">— Select —</option>`;
-    appData.chems.forEach((c) => {
-      const o = document.createElement("option");
-      o.value = c.name;
-      o.textContent = `${c.name} (${c.active})`;
-      chemSelect.appendChild(o);
-    });
-  };
-
-  BM.addChemical = () => {
-    const chem = chemSelect.value;
-    const per100 = parseFloat(document.getElementById("bm_per100").value);
-    const unit = document.getElementById("bm_unit").value;
-    const totalMix = parseFloat(document.getElementById("bm_mix").value || 0);
-    if (!chem || !per100 || !unit || !totalMix) return alert("Fill all chemical fields.");
-    const total = ((per100 / 100) * totalMix).toFixed(2);
-    const obj = { chem, per100, unit, total: parseFloat(total) };
-    currentBatch.chems.push(obj);
-    BM.updateChemList();
-  };
-
-  BM.updateChemList = () => {
-    chemList.innerHTML = "";
-    currentBatch.chems.forEach((c, i) => {
-      const div = document.createElement("div");
-      div.className = "card soft";
-      div.innerHTML = `
-        <b>${c.chem}</b> – ${c.per100}${c.unit}/100L → <span class="accent">${c.total}${c.unit}</span>
-        <button data-i="${i}" class="pill warn small">Remove</button>`;
-      div.querySelector("button").onclick = (e) => {
-        currentBatch.chems.splice(e.target.dataset.i, 1);
-        BM.updateChemList();
-      };
-      chemList.appendChild(div);
-    });
-  };
-
-  BM.saveBatch = () => {
-    currentBatch.date = document.getElementById("bm_date").value;
-    currentBatch.time = document.getElementById("bm_time").value;
-    currentBatch.totalMix = parseFloat(document.getElementById("bm_mix").value || 0);
-    currentBatch.remaining = parseFloat(document.getElementById("bm_remaining").value || currentBatch.totalMix);
-    const dumpAmt = parseFloat(document.getElementById("bm_dumpAmt").value || 0);
-    const dumpReason = document.getElementById("bm_dumpReason").value;
-    if (dumpAmt > 0) {
-      currentBatch.dump.push({ amount: dumpAmt, reason: dumpReason });
-      currentBatch.remaining -= dumpAmt;
-      if (currentBatch.remaining < 0) currentBatch.remaining = 0;
-    }
-
-    const existing = appData.batches.findIndex((b) => b.id === currentBatch.id);
-    if (existing >= 0) appData.batches[existing] = currentBatch;
-    else appData.batches.push(currentBatch);
-
-    BM.save(appData);
-    BM.renderList();
-    BM.closeModal();
-  };
-
-  BM.renderList = () => {
-    batchList.innerHTML = "";
-    if (!appData.batches.length) {
-      batchList.innerHTML = "<div class='muted'>No batches recorded.</div>";
-      return;
-    }
-
-    appData.batches.forEach((b) => {
-      const div = document.createElement("div");
-      const ring = b.remaining <= 0 ? "style='border:2px solid red;'" : "";
-      div.className = "card soft";
-      div.innerHTML = `
-        <div ${ring}>
-          <b>${b.id}</b> — ${b.date} ${b.time}<br>
-          <small>Total Mix: ${b.totalMix}L | Remaining: ${b.remaining}L</small><br>
-          <button class="pill small" data-id="${b.id}">Open</button>
-        </div>`;
-      div.querySelector("button").onclick = () => BM.viewBatch(b.id);
-      batchList.appendChild(div);
-    });
-  };
-
-  BM.viewBatch = (id) => {
-    const b = appData.batches.find((x) => x.id === id);
-    if (!b) return;
-    const popup = document.createElement("div");
-    popup.className = "modal";
-    const dumps = b.dump.map((d) => `<li>${d.amount}L dumped — ${d.reason}</li>`).join("") || "<li>None</li>";
-    const chems = b.chems
-      .map((c) => `<li>${c.chem}: ${c.per100}${c.unit}/100L → ${c.total}${c.unit}</li>`)
+  /* ===== Batch Popup ===== */
+  B.showBatchPopup = (b, DB, saveDB, renderBatches, populateBatchSelect) => {
+    const totalChem = b.chemicals
+      .map((c) => `<li>${c.name} — ${fmt(c.rate)} per 100L (${fmt(c.totalUsed)} ${c.unit})</li>`)
       .join("");
-    popup.innerHTML = `
-      <div class="card p">
-        <h3>${b.id}</h3>
-        <p>Date: ${b.date} ${b.time}</p>
-        <p>Total Mix: ${b.totalMix}L | Remaining: ${b.remaining}L</p>
-        <h4>Chemicals</h4><ul>${chems}</ul>
-        <h4>Dump Log</h4><ul>${dumps}</ul>
-        <div class="row end gap mt">
-          <button class="pill warn" id="closeBatchPopup">Close</button>
+    const dumps = b.dumps?.length
+      ? b.dumps.map((d) => `<li>${d.date} ${d.time} — ${fmt(d.amount)} L (${d.reason})</li>`).join("")
+      : "—";
+
+    const html = `
+      <div class="modal">
+        <div class="card p">
+          <h3 style="margin-top:0">${b.id}</h3>
+          <div><b>Date:</b> ${b.date} • ${b.time}</div>
+          <div><b>Total Mix:</b> ${fmt(b.mix)} L</div>
+          <div><b>Remaining:</b> ${fmt(b.remaining)} L</div>
+          <div><b>Chemicals:</b><ul>${totalChem}</ul></div>
+          <div><b>Dumped:</b><ul>${dumps}</ul></div>
+          <div class="row gap end" style="margin-top:.8rem;">
+            <button class="pill" data-dump>Dump</button>
+            <button class="pill" data-edit>Edit</button>
+            <button class="pill warn" data-close>Close</button>
+          </div>
         </div>
       </div>`;
-    document.body.appendChild(popup);
-    document.getElementById("closeBatchPopup").onclick = () => popup.remove();
+
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    document.body.appendChild(wrap.firstChild);
+    const modal = document.querySelector(".modal");
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal || e.target.dataset.close != null) modal.remove();
+    });
+
+    modal.querySelector("[data-edit]").addEventListener("click", () => {
+      const mix = Number(prompt("Total mix (L):", b.mix)) || b.mix;
+      const remaining = Number(prompt("Remaining (L):", b.remaining)) || b.remaining;
+      b.mix = mix;
+      b.remaining = remaining;
+      saveDB();
+      modal.remove();
+      renderBatches();
+      populateBatchSelect();
+    });
+
+    modal.querySelector("[data-dump]").addEventListener("click", () => {
+      const amt = Number(prompt("Amount to dump (L):", "0")) || 0;
+      if (!amt) return alert("Invalid amount.");
+      const reason = prompt("Reason for dump:", "Expired or spillage") || "—";
+      const now = new Date();
+      const dumpRecord = {
+        amount: amt,
+        reason,
+        date: now.toISOString().split("T")[0],
+        time: now.toTimeString().slice(0, 5),
+      };
+      b.dumps.push(dumpRecord);
+      b.remaining = Math.max(0, b.remaining - amt);
+      if (b.remaining <= 0) b.color = "red";
+      saveDB();
+      modal.remove();
+      renderBatches();
+      populateBatchSelect();
+      alert("Dump recorded successfully.");
+    });
   };
 
-  return BM;
+  return B;
 })();
-END batches.js
